@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker { 
             image 'ghcr.io/graalvm/native-image-community:25-ol9'
-            args '-v $HOME/.m2:/root/.m2'
+            args "-v $HOME/.m2:/root/.m2"
         }
     }
     
