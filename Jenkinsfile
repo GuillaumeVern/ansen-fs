@@ -5,6 +5,11 @@ pipeline {
             args '-v /var/lib/jenkins/.m2:/root/.m2 --security-opt seccomp=unconfined --security-opt apparmor=unconfined'
         }
     }
+
+    environment {
+        LANG = 'en_US.UTF-8'
+        LC_ALL = 'en_US.UTF-8'
+    }
     
     stages {
         stage('Checkout') {
