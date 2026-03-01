@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker { 
             image 'ghcr.io/graalvm/native-image-community:25-ol9'
-            args '-v /var/lib/jenkins/.m2:/root/.m2 --env LANG=en_US.UTF-8 --env LC_ALL=en_US.UTF-8'
+            args '--env LANG=en_US.UTF-8 --env LC_ALL=en_US.UTF-8'
         }
     }
 
