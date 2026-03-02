@@ -9,7 +9,7 @@ pipeline {
         LANG = 'en_US.UTF-8'
         LC_ALL = 'en_US.UTF-8'
         HOME = '/root'
-        JAVA_HOME = "${env.JDK}"
+        JAVA_HOME = "${env.JAVA_HOME}"
     }
     
     stages {
