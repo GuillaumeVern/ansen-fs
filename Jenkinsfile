@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     tools {
-        graalvm 'graalvm-25' 
+        jdk 'graalvm-25' 
     }
     
     environment {
