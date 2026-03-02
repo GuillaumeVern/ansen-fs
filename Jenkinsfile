@@ -47,33 +47,19 @@ pipeline {
         }
 
         stage('Upload to GitHub') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: '73183d21-d863-4fee-b138-d395cc209e0a', usernameVariable: 'GIT_USER', passwordVariable: 'GITHUB_TOKEN')]) {
-                        def repo = "GuillaumeVern/ansen-fs"
-                        def binaryPath = "target/ansenfs"
-                        def tagName = "v1.0.${BUILD_NUMBER}"
+    steps {
+        script {
+            withCredentials([usernamePassword(credentialsId: '73183d21-d863-4fee-b138-d395cc209e0a', usernameVariable: 'GIT_USER', passwordVariable: 'GITHUB_TOKEN')]) {
+                def repo = "GuillaumeVern/ansen-fs"
+                def binaryPath = "target/ansenfs"
+                def tagName = "v1.0.${BUILD_NUMBER}"
 
-                        // 1. Créer une Release sur GitHub
-                        sh """
-                        curl -X POST \
-                          -H "Authorization: token ${GITHUB_TOKEN}" \
-                          -H "Content-Type: application/json" \
-                          -d '{"tag_name": "${tagName}", "name": "Build ${tagName}", "draft": false, "prerelease": false}' \
-                          https://api.github.com/repos/${repo}/releases
-                        """
+                sh "curl -X POST -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Content-Type: application/json' -d '{\"tag_name\": \"${tagName}\", \"name\": \"Build ${tagName}\", \"draft\": false, \"prerelease\": false}' https://api.github.com/repos/${repo}/releases"
 
-                        // 2. Upload le binaire dans la Release
-                        sh """
-                        curl -X POST \
-                          -H "Authorization: token ${GITHUB_TOKEN}" \
-                          -H "Content-Type: application/octet-stream" \
-                          --data-binary @${binaryPath} \
-                          https://uploads.github.com/repos/${repo}/releases/tags/${tagName}/assets?name=ansenfs
-                        """
-                    }
-                }
+                sh "curl -X POST -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Content-Type: application/octet-stream' --data-binary @${binaryPath} https://uploads.github.com/repos/${repo}/releases/tags/${tagName}/assets?name=ansenfs"
             }
         }
+    }
+}
     }
 }
