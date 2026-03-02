@@ -18,6 +18,19 @@ pipeline {
                 checkout scm
             }
         }
+
+        stage('Debug Env') {
+            steps {
+                script {
+                    // --- AJOUTE CES LIGNES ---
+                    echo "Checking JAVA_HOME value:"
+                    sh 'echo $JAVA_HOME'                // Affiche le chemin
+                    sh 'ls -ld $JAVA_HOME'             // Vérifie si le dossier existe et ses droits
+                    sh '$JAVA_HOME/bin/java -version' // Vérifie si java est exécutable
+                    // -------------------------
+                }
+            }
+        }
         
         stage('Build Native Binary') {
             steps {
