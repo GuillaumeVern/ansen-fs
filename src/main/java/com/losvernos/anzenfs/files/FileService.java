@@ -25,30 +25,28 @@ public class FileService {
   private final Path stagingDir = new File(FileUtils.getDataDir(), "staging").toPath();
 
   public void processFolderUpload(String jobId, String rootParentUuid, MultipartFile[] files) {
-    for (int i = 0; i < files.length; i++) {
+    for (MultipartFile file : files) {
       try {
-        Path file = stagingDir.resolve("file_" + i);
-        String relativePath = files[i].getOriginalFilename();
-        if (null == relativePath)
-          continue;
+        String originalName = file.getOriginalFilename();
+        if (originalName == null) continue;
 
-        Path incomingPath = Path.of(relativePath);
+        Path incomingPath = Path.of(originalName);
         if (incomingPath.isAbsolute()) {
           incomingPath = incomingPath.getRoot().relativize(incomingPath);
         }
 
         Path targetLocation = storageRoot.resolve(incomingPath).normalize();
-
         if (!targetLocation.startsWith(storageRoot)) {
-          throw new SecurityException("Escape attempt detected: " + relativePath);
+          throw new SecurityException("Escape attempt detected: " + incomingPath);
         }
+
+        Files.createDirectories(targetLocation.getParent());
+        file.transferTo(targetLocation.toFile());
 
         Integer rootParentId = fileRepository.findIdByUuid(rootParentUuid).orElse(1);
         Integer folderId = resolveFolderHierarchy(rootParentId, incomingPath);
 
-        String fileName = Path.of(relativePath).getFileName().toString();
-        saveToDisk(file, targetLocation);
-
+        String fileName = incomingPath.getFileName().toString();
         String hash = generateHeuristicHash(incomingPath);
         fileRepository.insertFile(folderId, fileName, "FILE", hash);
 
@@ -86,11 +84,6 @@ public class FileService {
     }
 
     return currentParentId;
-  }
-
-  private void saveToDisk(Path file, Path targetLocation) throws IOException {
-    Files.createDirectories(targetLocation.getParent());
-    Files.move(file, targetLocation);
   }
 
   private String generateHeuristicHash(Path file) throws IOException {

@@ -34,12 +34,12 @@ public class SecurityConfig {
   }
 
   @Bean
-  public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+  public AuthenticationManager authenticationManager(AuthenticationConfiguration config) {
     return config.getAuthenticationManager();
   }
 
   @Bean
-  public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+  public SecurityFilterChain filterChain(HttpSecurity http) {
     JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter();
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -48,6 +48,7 @@ public class SecurityConfig {
             .requestMatchers("/api/auth/**").permitAll()
             .requestMatchers("/api/users/create").permitAll()
             .requestMatchers("/api/files/upload").permitAll()
+            .requestMatchers("/api/files/jobs/**").permitAll()
             .requestMatchers("/api/**").authenticated()
             .requestMatchers("/**").permitAll());
     return http.build();

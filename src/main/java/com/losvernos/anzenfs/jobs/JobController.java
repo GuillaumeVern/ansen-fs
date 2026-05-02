@@ -1,8 +1,6 @@
 package com.losvernos.anzenfs.jobs;
 
-import java.sql.Array;
 import java.util.Map;
-import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -25,15 +23,14 @@ public class JobController {
   @Autowired
   private JobService jobService;
 
-  @PostMapping
-  public ResponseEntity<?> createJob(@RequestBody ManifestRequest request) {
-    String jobId = UUID.randomUUID().toString();
+  @PostMapping("/new")
+  public ResponseEntity<?> createJob(@RequestBody UploadJobCreationRequest request) {
 
-    jobService.createJob(jobId, request.parentUuid(), request.manifest());
+    var jobId = jobService.createJob(request.parentUuid(), request.manifest());
     return ResponseEntity.ok(Map.of("jobId", jobId));
   }
 
-  @PostMapping("/api/files/jobs/{jobId}/upload")
+  @PostMapping("/{jobId}/upload")
   public ResponseEntity<?> uploadFile(
       @PathVariable String jobId,
       @RequestParam("files") MultipartFile[] files,

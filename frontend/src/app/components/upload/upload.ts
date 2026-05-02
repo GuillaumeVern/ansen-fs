@@ -1,5 +1,12 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
+import {concatMap, from} from 'rxjs';
+
+interface CreateJobRequest {
+  parentUuid: string
+  totalFiles: number
+  manifest: string[]
+}
 
 @Component({
   selector: 'app-upload',
@@ -18,21 +25,56 @@ export class Upload {
   }
 
   uploadFolder() {
-    const formData = new FormData();
+    let formData: CreateJobRequest = {
+      parentUuid: '',
+      totalFiles: 0,
+      manifest: [],
+    };
     console.log(this.selectedFiles)
 
-    formData.append('parentId', this.currentFolderUuid);
+    formData.parentUuid = this.currentFolderUuid;
+    let paths: string[] = [];
 
-    this.selectedFiles.forEach((file: any) => {
-      formData.append('files', file, file.webkitRelativePath);
+    this.selectedFiles.forEach((file: File) => {
+      paths.push(file.webkitRelativePath);
     });
+    formData.manifest = paths;
+    formData.totalFiles = paths.length;
 
-    this.http.post('/api/files/upload', formData).subscribe({
+    this.http.post('/api/files/jobs/new', formData).subscribe({
       next: (response: any) => {
-        console.log('Upload started, Task ID:', response.taskId);
-        // Start polling TaskSummary endpoint with this ID
+        console.log('Upload started, Job ID:', response.jobId);
+        this.uploadFiles(response.jobId)
       },
       error: (err: any) => console.error('Upload failed', err)
+    });
+  }
+
+  uploadFiles(jobId: string) {
+    // 1. Chunk your files exactly as before
+    let chunkSize = 3;
+    let allFiles = [...this.selectedFiles];
+    let chunks: File[][] = [];
+
+    while (allFiles.length > 0) {
+      chunks.push(allFiles.splice(0, chunkSize));
+    }
+
+    from(chunks).pipe(
+      concatMap((chunk) => {
+        const formData = new FormData();
+        chunk.forEach(file => formData.append('files', file));
+        formData.append('parentUuid', this.currentFolderUuid);
+
+        chunk.forEach((file) => {
+          console.log("uploading: " + file.webkitRelativePath);
+        })
+        return this.http.post(`api/files/jobs/${jobId}/upload`, formData);
+      })
+    ).subscribe({
+      next: (response) => console.log('Chunk uploaded successfully:', response),
+      error: (err) => console.error('An error occurred during the sequence:', err),
+      complete: () => console.log('All chunks have been uploaded!')
     });
   }
 }

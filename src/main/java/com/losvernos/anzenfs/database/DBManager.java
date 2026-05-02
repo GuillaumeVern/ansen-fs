@@ -67,7 +67,6 @@ public class DBManager {
     if (!dbFile.exists()) {
       try {
         dbFile.createNewFile();
-        DBInitializer.initialize();
       } catch (IOException e) {
         e.printStackTrace();
       }

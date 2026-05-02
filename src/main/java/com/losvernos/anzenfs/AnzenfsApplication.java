@@ -1,5 +1,6 @@
 package com.losvernos.anzenfs;
 
+import com.losvernos.anzenfs.database.DBInitializer;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,9 +30,10 @@ public class AnzenfsApplication {
   public void checkLimits() {
     System.out.println("Max File Size: " + multipartConfigElement.getMaxFileSize());
     System.out.println("Max Request Size: " + multipartConfigElement.getMaxRequestSize());
+    DBInitializer.initialize();
   }
 
-  public static void main(String[] args) {
+  static void main(String[] args) {
     SpringApplication.run(AnzenfsApplication.class, args);
   }
 
