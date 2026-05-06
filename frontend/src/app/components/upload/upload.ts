@@ -3,7 +3,7 @@ import { Component, inject } from '@angular/core';
 import {concatMap, from} from 'rxjs';
 
 interface CreateJobRequest {
-  parentUuid: string
+  parentUuid: string | null
   totalFiles: number
   manifest: string[]
 }
@@ -16,7 +16,6 @@ interface CreateJobRequest {
 })
 export class Upload {
   selectedFiles: File[] = [];
-  currentFolderUuid: string = "83a96145-8eec-4175-8372-c8f68be9f683";
 
   private http = inject(HttpClient);
 
@@ -24,15 +23,15 @@ export class Upload {
     this.selectedFiles = Array.from(event.target.files);
   }
 
-  uploadFolder() {
+  uploadFolder(currentFolderUuid: string) {
     let formData: CreateJobRequest = {
-      parentUuid: '',
+      parentUuid: null,
       totalFiles: 0,
       manifest: [],
     };
     console.log(this.selectedFiles)
 
-    formData.parentUuid = this.currentFolderUuid;
+    formData.parentUuid = currentFolderUuid;
     let paths: string[] = [];
 
     this.selectedFiles.forEach((file: File) => {
@@ -44,14 +43,13 @@ export class Upload {
     this.http.post('/api/files/jobs/new', formData).subscribe({
       next: (response: any) => {
         console.log('Upload started, Job ID:', response.jobId);
-        this.uploadFiles(response.jobId)
+        this.uploadFiles(response.jobId, currentFolderUuid)
       },
       error: (err: any) => console.error('Upload failed', err)
     });
   }
 
-  uploadFiles(jobId: string) {
-    // 1. Chunk your files exactly as before
+  private uploadFiles(jobId: string, currentFolderUuid: string) {
     let chunkSize = 3;
     let allFiles = [...this.selectedFiles];
     let chunks: File[][] = [];
@@ -64,7 +62,7 @@ export class Upload {
       concatMap((chunk) => {
         const formData = new FormData();
         chunk.forEach(file => formData.append('files', file));
-        formData.append('parentUuid', this.currentFolderUuid);
+        formData.append('parentUuid', currentFolderUuid);
 
         chunk.forEach((file) => {
           console.log("uploading: " + file.webkitRelativePath);

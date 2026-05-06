@@ -1,0 +1,7 @@
+<button (click)="goBack()">Go Back</button>
+<cdk-virtual-scroll-viewport itemSize="50" class="viewport-container" (scrolledIndexChange)="onScrollIndexChange($event)">
+  <app-store-element
+    *cdkVirtualFor="let node of fileNodes()"
+    [data]="node">
+  </app-store-element>
+</cdk-virtual-scroll-viewport>

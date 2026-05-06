@@ -47,8 +47,7 @@ public class SecurityConfig {
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**").permitAll()
             .requestMatchers("/api/users/create").permitAll()
-            .requestMatchers("/api/files/upload").permitAll()
-            .requestMatchers("/api/files/jobs/**").permitAll()
+            .requestMatchers("/api/files/**").permitAll()
             .requestMatchers("/api/**").authenticated()
             .requestMatchers("/**").permitAll());
     return http.build();
