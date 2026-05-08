@@ -1,25 +1,66 @@
-import {EventEmitter, Injectable, OnInit} from '@angular/core';
+import { inject, Injectable, signal, computed } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 
-@Injectable({
-  providedIn: 'root',
-})
-export class StoreService implements OnInit {
-  protected ariane: string[] = [];
-  changeParent: EventEmitter<string> = new EventEmitter<string>();
-  ngOnInit() {
-    this.ariane.push("")
-    this.changeParent.subscribe((parentUuid) => {
-      this.ariane.push(parentUuid)
-    })
+export interface FileNode {
+  uuid: string;
+  parentUuid: string;
+  name: string;
+  type: string;
+  hash: string;
+  size: number;
+}
+
+@Injectable({ providedIn: 'root' })
+export class StoreService {
+  private http = inject(HttpClient);
+
+  private nodes = signal<FileNode[]>([]);
+  private ariane = signal<string[]>([""]); // Breadcrumbs
+
+  public fileNodes = this.nodes.asReadonly();
+  public isLoading = signal(false);
+  public currentParentUuid = computed(() => this.ariane()[this.ariane().length - 1]);
+
+  async loadFiles(replace = false) {
+    if (this.isLoading()) return;
+
+    const currentNodes = this.nodes();
+    const lastNode = currentNodes[currentNodes.length - 1];
+    const parentUuid = this.currentParentUuid();
+
+    let params = new HttpParams();
+    if (parentUuid) params = params.set('parentUuid', parentUuid);
+    if (!replace && lastNode) params = params.set('lastFileName', lastNode.name);
+
+    this.isLoading.set(true);
+    try {
+      const newNodes = await firstValueFrom(this.http.get<FileNode[]>("/api/files", { params }));
+
+      if (replace) {
+        this.nodes.set(newNodes);
+      } else {
+        this.nodes.update(old => [...old, ...newNodes]);
+      }
+    } catch (err) {
+      console.error("Failed to load files", err);
+    } finally {
+      this.isLoading.set(false);
+    }
   }
 
-  goBack(position?: number) {
-    if (!position) {
-      this.changeParent.emit(this.ariane[-1]);
-      this.ariane.pop()
-    } else {
-      this.changeParent.emit(this.ariane[position])
-      this.ariane.slice(0, position);
-    }
+  changeParent(uuid: string) {
+    this.ariane.update(prev => [...prev, uuid]);
+    this.loadFiles(true);
+  }
+
+  goBack() {
+    this.ariane.update(prev => {
+      if (prev.length <= 1) return prev;
+      const next = [...prev];
+      next.pop();
+      return next;
+    });
+    this.loadFiles(true);
   }
 }

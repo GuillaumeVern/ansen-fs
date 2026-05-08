@@ -1,14 +1,15 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
-import { Upload } from './components/upload/upload';
-import {Store} from './components/store/store';
+import { Component } from '@angular/core';
+import { RouterLink, RouterOutlet } from '@angular/router';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzLayoutModule } from 'ng-zorro-antd/layout';
+import { NzMenuModule } from 'ng-zorro-antd/menu';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, Upload, Store],
+  imports: [RouterLink, RouterOutlet, NzIconModule, NzLayoutModule, NzMenuModule],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
 export class App {
-  protected readonly title = signal('frontend');
+  isCollapsed = false;
 }

@@ -31,9 +31,7 @@
                 "input": "public"
               }
             ],
-            "styles": [
-              "src/styles.scss"
-            ]
+            "styles": ["./node_modules/ng-zorro-antd/ng-zorro-antd.min.css", "src/styles.scss"]
           },
           "configurations": {
             "production": {
@@ -41,7 +39,7 @@
                 {
                   "type": "initial",
                   "maximumWarning": "500kB",
-                  "maximumError": "1MB"
+                  "maximumError": "2MB"
                 },
                 {
                   "type": "anyComponentStyle",

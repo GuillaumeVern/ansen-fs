@@ -1,7 +1,17 @@
-<button (click)="goBack()">Go Back</button>
-<cdk-virtual-scroll-viewport itemSize="50" class="viewport-container" (scrolledIndexChange)="onScrollIndexChange($event)">
-  <app-store-element
-    *cdkVirtualFor="let node of fileNodes()"
-    [data]="node">
-  </app-store-element>
-</cdk-virtual-scroll-viewport>
+<div #container class="store-wrapper"
+     [style.--cols]="columns()"
+     [style.--item-h.px]="itemHeight">
+  <button (click)="goBack()">Go Back</button>
+
+  <cdk-virtual-scroll-viewport
+    [itemSize]="itemHeight"
+    class="viewport"
+    (scrolledIndexChange)="onScrollIndexChange($event)">
+
+    <div *cdkVirtualFor="let row of rows(); trackBy: trackByRow" class="grid-row">
+      @for (node of row; track node.uuid) {
+      <app-store-element [data]="node" class="grid-item" />
+      }
+    </div>
+  </cdk-virtual-scroll-viewport>
+</div>

@@ -1,5 +1,13 @@
-import {Component, inject, OnInit, signal, ViewChild, WritableSignal} from '@angular/core';
-import {HttpClient, HttpParams} from '@angular/common/http';
+import {
+  Component,
+  computed, effect,
+  ElementRef,
+  inject,
+  OnInit,
+  signal,
+  viewChild,
+  ViewChild,
+} from '@angular/core';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import {StoreService} from '../../services/store';
 import {StoreElement} from './store-element/store-element';
@@ -20,79 +28,73 @@ export interface FileNode {
   styleUrl: './store.scss',
 })
 export class Store implements OnInit {
+  private storeService = inject(StoreService);
+  private container = viewChild<ElementRef>('container');
+
   @ViewChild(CdkVirtualScrollViewport) viewport!: CdkVirtualScrollViewport;
-  protected fileNodes: WritableSignal<FileNode[]> = signal([]);
-  private http = inject(HttpClient);
-  protected parentUuid = ""
-  private isLoading = false;
-  private storeService: StoreService = inject(StoreService)
+
+  protected fileNodes = this.storeService.fileNodes;
+  protected isLoading = this.storeService.isLoading;
+
+  protected readonly itemHeight = 200;
+  protected readonly minItemWidth = 200;
+  private containerWidth = signal(0);
+
+  protected columns = computed(() => {
+    return Math.max(1, Math.floor(this.containerWidth() / this.minItemWidth));
+  });
+
+  protected rows = computed(() => {
+    const nodes = this.fileNodes();
+    const cols = this.columns();
+    const chunked = [];
+    for (let i = 0; i < nodes.length; i += cols) {
+      chunked.push(nodes.slice(i, i + cols));
+    }
+    return chunked;
+  });
+
+  constructor() {
+    effect((onCleanup) => {
+      const el = this.container()?.nativeElement;
+      if (!el) return;
+      const observer = new ResizeObserver(entries => {
+        this.containerWidth.set(entries[0].contentRect.width);
+        this.checkAndLoadMore();
+      });
+      observer.observe(el);
+      onCleanup(() => observer.disconnect());
+    });
+  }
 
   ngOnInit() {
-    this.getMoreFiles(this.parentUuid)
-    this.storeService.changeParent.subscribe((parentUuid) => this.changeParent(parentUuid))
+    this.storeService.loadFiles(true);
   }
 
   onScrollIndexChange(index: number) {
-    const end = this.viewport.getRenderedRange().end;
-    const total = this.viewport.getDataLength();
+    const totalRows = this.rows().length;
+    if (totalRows === 0 || this.isLoading()) return;
 
-    if (end === total && !this.isLoading && total > 0) {
-      const lastNode = this.fileNodes().at(-1);
-      if (lastNode) {
-        this.getMoreFiles(this.parentUuid, lastNode.name);
+    const viewportHeight = this.viewport.elementRef.nativeElement.clientHeight;
+    const rowsPerPage = Math.ceil(viewportHeight / this.itemHeight);
+
+    if (index >= totalRows - rowsPerPage - 2) {
+      this.storeService.loadFiles(false); // Append
+    }
+  }
+
+  private checkAndLoadMore() {
+    if (this.isLoading()) return;
+
+    const viewportEl = this.viewport?.elementRef.nativeElement;
+    if (viewportEl) {
+      const contentHeight = this.rows().length * this.itemHeight;
+      if (contentHeight <= viewportEl.clientHeight) {
+        this.storeService.loadFiles(false);
       }
     }
   }
 
-  getMoreFiles(parentUuid?: string, lastFileName?: string) {
-    this.isLoading = true;
-    let url: string = "/api/files";
-    let httpParams: HttpParams = new HttpParams();
-    if (parentUuid) {
-      httpParams = httpParams.set('parentUuid', parentUuid);
-    }
-    if (lastFileName) {
-      httpParams = httpParams.set('lastFileName', lastFileName);
-    }
-    this.http.get<FileNode[]>(url, {params: httpParams}).subscribe({
-      next: (fileNodes) => {
-        this.fileNodes.update((originalFileNodes: FileNode[]) => {
-          return [...originalFileNodes, ...fileNodes]
-        })
-        console.log(this.fileNodes())
-        this.isLoading = false;
-      },
-      error: (response) => {
-        console.error(response);
-        this.isLoading = false;
-      }
-    })
-  }
-
-  changeParent(parentUuid: string) {
-    this.isLoading = true;
-    let url: string = "/api/files";
-    let httpParams: HttpParams = new HttpParams();
-    if (parentUuid) {
-      httpParams = httpParams.set('parentUuid', parentUuid);
-      this.parentUuid = parentUuid;
-    } else {
-      this.parentUuid = "";
-    }
-    this.http.get<FileNode[]>(url, {params: httpParams}).subscribe({
-      next: (fileNodes) => {
-        this.fileNodes.set([...fileNodes])
-        console.log(this.fileNodes())
-        this.isLoading = false;
-      },
-      error: (response) => {
-        console.error(response);
-        this.isLoading = false;
-      }
-    })
-  }
-
-  goBack() {
-    this.storeService.goBack();
-  }
+  goBack() { this.storeService.goBack(); }
+  trackByRow(i: number, row: FileNode[]) { return row[0]?.uuid || i; }
 }

@@ -1,7 +1,7 @@
-{{data.name}}
-{{data.type}}
-{{data.size}}
-@if (data.type == 'FOLDER' ) {
-  <button (click)="open()">Open</button>
-}
-<br>-----------------<br>
+<nz-card nzHoverable [nzCover]="coverTemplate" (click)="open()">
+  <nz-card-meta nzTitle="{{data.name}}" nzDescription="type: {{data.type}}, size: {{data.size}}" />
+</nz-card>
+<ng-template #coverTemplate>
+  <img alt="preview" src="" />
+</ng-template>
+
