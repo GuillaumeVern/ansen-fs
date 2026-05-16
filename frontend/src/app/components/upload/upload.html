@@ -1,8 +1,23 @@
-<input type="file"
-       #folderInput
-       webkitdirectory
-       directory
-       multiple
-       (change)="onFolderSelected($event)">
+<div class="drop-zone"
+     (dragover)="onDragOver($event)"
+     (dragleave)="onDragLeave($event)"
+     (drop)="onFileDrop($event)"
+     [class.active]="isDraggingOver">
 
-<button (click)="uploadFolder('')">Upload Folder</button>
+  <p>Drag & Drop files OR folders here</p>
+  <span>— OR —</span>
+
+  <div class="upload-actions">
+    <input type="file" #fileInput multiple (change)="onItemsSelected($event)" style="display: none;">
+    <input type="file" #folderInput webkitdirectory directory multiple (change)="onItemsSelected($event)" style="display: none;">
+
+    <button (click)="fileInput.click(); $event.stopPropagation()">Choose Files</button>
+    <button (click)="folderInput.click(); $event.stopPropagation()">Choose Folder</button>
+  </div>
+</div>
+
+@if (selectedFiles.length > 0) {
+  <button nz-button nzType="primary" (click)="uploadItems(storeService.currentParentUuid())">
+    Confirm Upload of {{ selectedFiles.length }} items
+  </button>
+}

@@ -1,6 +1,6 @@
 import { inject, Injectable, signal, computed } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import {HttpClient, HttpEvent, HttpParams} from '@angular/common/http';
+import {firstValueFrom, Observable} from 'rxjs';
 
 export interface FileNode {
   uuid: string;
@@ -62,5 +62,13 @@ export class StoreService {
       return next;
     });
     this.loadFiles(true);
+  }
+
+  downloadFile(uuid: string): Observable<HttpEvent<Blob>> {
+    return this.http.get(`/api/files/download/${uuid}`, {
+      responseType: 'blob',
+      reportProgress: true,
+      observe: 'events'
+    });
   }
 }

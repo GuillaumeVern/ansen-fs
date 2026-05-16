@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import {concatMap, from} from 'rxjs';
+import {StoreService} from '../../services/store';
 
 interface CreateJobRequest {
   parentUuid: string | null
@@ -18,27 +19,97 @@ export class Upload {
   selectedFiles: File[] = [];
 
   private http = inject(HttpClient);
+  protected storeService = inject(StoreService);
+  protected isDraggingOver = false;
 
-  onFolderSelected(event: any) {
+  onDragOver(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDraggingOver = true;
+  }
+
+  onDragLeave(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDraggingOver = false;
+  }
+
+  async onFileDrop(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDraggingOver = false;
+
+    const items = event.dataTransfer?.items;
+    if (!items) return;
+
+    const filePromises: Promise<File>[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry) {
+          this.traverseFileTree(entry, '', filePromises);
+        }
+      }
+    }
+
+    const resolvedFiles = await Promise.all(filePromises);
+    this.selectedFiles = [...this.selectedFiles, ...resolvedFiles];
+    console.log(`Parsed total of ${this.selectedFiles.length} files from drag-and-drop.`);
+  }
+
+  private traverseFileTree(entry: any, path: string, filePromises: Promise<File>[]) {
+    if (entry.isFile) {
+      filePromises.push(new Promise((resolve, reject) => {
+        entry.file((file: File) => {
+          const relativePath = path ? `${path}${entry.name}` : entry.name;
+          Object.defineProperty(file, 'webkitRelativePath', {
+            value: relativePath,
+            writable: false
+          });
+          resolve(file);
+        }, reject);
+      }));
+    } else if (entry.isDirectory) {
+      const dirReader = entry.createReader();
+
+      const readEntries = () => {
+        dirReader.readEntries((entries: any[]) => {
+          if (entries.length > 0) {
+            for (const subEntry of entries) {
+              this.traverseFileTree(subEntry, `${path}${entry.name}/`, filePromises);
+            }
+            readEntries();
+          }
+        });
+      };
+      readEntries();
+    }
+  }
+
+  onItemsSelected(event: any) {
     this.selectedFiles = Array.from(event.target.files);
   }
 
-  uploadFolder(currentFolderUuid: string) {
+  uploadItems(currentFolderUuid: string) {
+    console.log("currentfolderuuid:", currentFolderUuid)
+    if (this.selectedFiles.length === 0) return;
+
     let formData: CreateJobRequest = {
-      parentUuid: null,
-      totalFiles: 0,
+      parentUuid: currentFolderUuid,
+      totalFiles: this.selectedFiles.length,
       manifest: [],
     };
     console.log(this.selectedFiles)
 
-    formData.parentUuid = currentFolderUuid;
     let paths: string[] = [];
 
     this.selectedFiles.forEach((file: File) => {
-      paths.push(file.webkitRelativePath);
+      const relativePath = file.webkitRelativePath || file.name;
+      paths.push(relativePath);
     });
     formData.manifest = paths;
-    formData.totalFiles = paths.length;
 
     this.http.post('/api/files/jobs/new', formData).subscribe({
       next: (response: any) => {
@@ -62,7 +133,7 @@ export class Upload {
       concatMap((chunk) => {
         const formData = new FormData();
         chunk.forEach(file => formData.append('files', file));
-        formData.append('parentUuid', currentFolderUuid);
+        formData.append('parentUuid', currentFolderUuid || '');
 
         chunk.forEach((file) => {
           console.log("uploading: " + file.webkitRelativePath);
@@ -72,7 +143,10 @@ export class Upload {
     ).subscribe({
       next: (response) => console.log('Chunk uploaded successfully:', response),
       error: (err) => console.error('An error occurred during the sequence:', err),
-      complete: () => console.log('All chunks have been uploaded!')
+      complete: () => {
+        console.log('All chunks have been uploaded!')
+        this.selectedFiles = [];
+      }
     });
   }
 }

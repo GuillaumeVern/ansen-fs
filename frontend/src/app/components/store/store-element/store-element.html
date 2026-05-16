@@ -1,7 +1,17 @@
 <nz-card nzHoverable [nzCover]="coverTemplate" (click)="open()">
   <nz-card-meta nzTitle="{{data.name}}" nzDescription="type: {{data.type}}, size: {{data.size}}" />
+  <button nz-button nzType="primary" nzSize="large" nzShape="circle" (click)="download(); $event.stopPropagation()">
+    <nz-icon nzType="download" />
+  </button>
+  @if (isDownloading) {
+    <div>
+      <p>Downloading... {{ progress }}%</p>
+      <div class="progress-bar-container">
+        <div class="progress-bar" [style.width.%]="progress"></div>
+      </div>
+    </div>
+  }
 </nz-card>
 <ng-template #coverTemplate>
   <img alt="preview" src="" />
 </ng-template>
-

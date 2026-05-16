@@ -1,7 +1,9 @@
 package com.losvernos.anzenfs.files;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -9,9 +11,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,6 +28,25 @@ public class FileService {
   private final Path storageRoot = new File(FileUtils.getDataDir(), "data").toPath();
 
   private final Path stagingDir = new File(FileUtils.getDataDir(), "staging").toPath();
+
+  public ResourceAndName prepareDownload(String externalId) throws FileNotFoundException, MalformedURLException {
+    String relativePath = fileRepository.getFullPath(externalId);
+
+    if (relativePath == null) {
+      throw new FileNotFoundException("File record not found in database.");
+    }
+
+    Path physicalPath = storageRoot.resolve(relativePath).normalize();
+
+    if (!Files.exists(physicalPath) || Files.isDirectory(physicalPath)) {
+      throw new FileNotFoundException("File does not exist on the filesystem.");
+    }
+
+    Resource resource = new UrlResource(physicalPath.toUri());
+    String fileName = physicalPath.getFileName().toString();
+
+    return new ResourceAndName(resource, fileName);
+  }
 
   public void processFolderUpload(String jobId, String rootParentUuid, MultipartFile[] files) {
     for (MultipartFile file : files) {
@@ -43,7 +67,7 @@ public class FileService {
         Files.createDirectories(targetLocation.getParent());
         file.transferTo(targetLocation.toFile());
 
-        Integer rootParentId = fileRepository.findIdByUuid(rootParentUuid).orElse(1);
+        Integer rootParentId = fileRepository.findIdByUuid(rootParentUuid).orElse(null);
         Integer folderId = resolveFolderHierarchy(rootParentId, incomingPath);
 
         String fileName = incomingPath.getFileName().toString();
@@ -57,9 +81,11 @@ public class FileService {
   }
 
   public List<FileNode> getChildrenAfter(String parentUuid, String lastFileName, int limit) {
-    Integer parentId = (parentUuid == null) ? 1
-        : fileRepository.findIdByUuid(parentUuid)
-            .orElseThrow(() -> new RuntimeException("Folder not found"));
+    Integer parentId = null;
+
+    if (parentUuid != null && !Objects.equals(parentUuid, "")) {
+      parentId = fileRepository.findIdByUuid(parentUuid).orElseThrow(() -> new RuntimeException("Folder not found"));
+    }
 
     return fileRepository.getChildrenAfter(parentId, lastFileName, parentUuid, limit);
   }

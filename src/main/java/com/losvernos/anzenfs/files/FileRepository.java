@@ -51,16 +51,28 @@ public class FileRepository {
 
     var sql = """
         SELECT * FROM files
-        WHERE parent_id IS ?
+        WHERE (? IS NULL AND parent_id IS NULL) OR (parent_id = ?)
         AND (? IS NULL OR name > ?)
-        ORDER BY name ASC
+        ORDER BY name
         LIMIT ?;
         """;
     try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql)) {
-      stmt.setInt(1, parentId);
-      stmt.setString(2, lastFileName);
-      stmt.setString(3, lastFileName);
-      stmt.setInt(4, limit);
+      if (parentId == null) {
+        stmt.setNull(1, java.sql.Types.INTEGER);
+        stmt.setNull(2, java.sql.Types.INTEGER);
+      } else {
+        stmt.setInt(1, parentId);
+        stmt.setInt(2, parentId);
+      }
+
+      if (lastFileName == null) {
+        stmt.setNull(3, java.sql.Types.VARCHAR);
+        stmt.setNull(4, java.sql.Types.VARCHAR);
+      } else {
+        stmt.setString(3, lastFileName);
+        stmt.setString(4, lastFileName);
+      }
+      stmt.setInt(5, limit);
       try (var rs = stmt.executeQuery()) {
         while (rs.next()) {
           result.add(new FileNode(
@@ -80,10 +92,9 @@ public class FileRepository {
   }
 
   public void insertFile(Integer parentId, String name, String type, String hash) {
-    var conn = DBManager.getInstance().getConnection();
     String sql = "INSERT INTO files (parent_id, name, type, file_hash, external_id) VALUES (?, ?, ?, ?, ?);";
 
-    try (var stmt = conn.prepareStatement(sql)) {
+    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql)) {
       String externalId = java.util.UUID.randomUUID().toString();
 
       if (parentId == null)
@@ -102,10 +113,9 @@ public class FileRepository {
   }
 
   public Integer createFolder(Integer parentId, String name) {
-    var conn = DBManager.getInstance().getConnection();
     String sql = "INSERT INTO files (parent_id, name, type, external_id) VALUES (?, ?, 'FOLDER', ?)";
 
-    try (var stmt = conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
+    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
       String externalId = java.util.UUID.randomUUID().toString();
 
       if (parentId == null) {
@@ -126,5 +136,40 @@ public class FileRepository {
       e.printStackTrace();
     }
     return null;
+  }
+
+  public String getFullPath(String externalId) {
+    var maxDepth = 10000;
+    String resultPath = null;
+
+    String sql = """
+            WITH RECURSIVE path_builder(level, name, parent_id) AS (
+              SELECT 0, name, parent_id
+              FROM files
+              WHERE external_id = ?
+              UNION ALL
+              SELECT pb.level + 1, f.name, f.parent_id
+              FROM files f
+              JOIN path_builder pb ON f.file_id = pb.parent_id
+              WHERE pb.level < ?
+            )
+            SELECT name FROM path_builder ORDER BY level DESC;
+            """;
+
+    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql)) {
+      stmt.setString(1, externalId);
+      stmt.setInt(2, maxDepth);
+      try (var rs = stmt.executeQuery()) {
+        List<String> pathParts = new ArrayList<>();
+        while (rs.next()) {
+          pathParts.add(rs.getString("name"));
+        }
+        resultPath = String.join("/", pathParts);
+      }
+    } catch (SQLException e) {
+      e.printStackTrace();
+    }
+
+    return resultPath;
   }
 }

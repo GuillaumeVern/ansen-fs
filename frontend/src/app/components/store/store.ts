@@ -1,6 +1,7 @@
 import {
   Component,
-  computed, effect,
+  computed,
+  effect,
   ElementRef,
   inject,
   OnInit,
@@ -9,8 +10,8 @@ import {
   ViewChild,
 } from '@angular/core';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
-import {StoreService} from '../../services/store';
-import {StoreElement} from './store-element/store-element';
+import { StoreService } from '../../services/store';
+import { StoreElement } from './store-element/store-element';
 
 export interface FileNode {
   uuid: string
@@ -58,10 +59,13 @@ export class Store implements OnInit {
     effect((onCleanup) => {
       const el = this.container()?.nativeElement;
       if (!el) return;
+
       const observer = new ResizeObserver(entries => {
+        if (!entries || entries.length === 0) return;
+
         this.containerWidth.set(entries[0].contentRect.width);
-        this.checkAndLoadMore();
       });
+
       observer.observe(el);
       onCleanup(() => observer.disconnect());
     });
@@ -79,22 +83,15 @@ export class Store implements OnInit {
     const rowsPerPage = Math.ceil(viewportHeight / this.itemHeight);
 
     if (index >= totalRows - rowsPerPage - 2) {
-      this.storeService.loadFiles(false); // Append
+      this.storeService.loadFiles(false);
     }
   }
 
-  private checkAndLoadMore() {
-    if (this.isLoading()) return;
-
-    const viewportEl = this.viewport?.elementRef.nativeElement;
-    if (viewportEl) {
-      const contentHeight = this.rows().length * this.itemHeight;
-      if (contentHeight <= viewportEl.clientHeight) {
-        this.storeService.loadFiles(false);
-      }
-    }
+  goBack() {
+    this.storeService.goBack();
   }
 
-  goBack() { this.storeService.goBack(); }
-  trackByRow(i: number, row: FileNode[]) { return row[0]?.uuid || i; }
+  trackByRow(i: number, row: any[]) {
+    return row[0]?.uuid || i;
+  }
 }

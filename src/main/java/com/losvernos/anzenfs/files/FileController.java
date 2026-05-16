@@ -1,21 +1,19 @@
 package com.losvernos.anzenfs.files;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.losvernos.anzenfs.jobs.UploadJobSummary;
@@ -69,6 +67,25 @@ public class FileController {
       @RequestParam(defaultValue = "50") int size) {
 
     return ResponseEntity.ok(fileService.getChildrenAfter(parentUuid, lastFileName, size));
+  }
+
+  @GetMapping("/download/{externalId}")
+  public ResponseEntity<Resource> downloadFile(@PathVariable String externalId) {
+    try {
+      ResourceAndName downloadInfo = fileService.prepareDownload(externalId);
+      long contentLength = downloadInfo.resource().contentLength();
+
+      return ResponseEntity.ok()
+              .contentType(MediaType.APPLICATION_OCTET_STREAM)
+              .contentLength(contentLength)
+              .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + downloadInfo.fileName() + "\"")
+              .body(downloadInfo.resource());
+
+    } catch (FileNotFoundException e) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    } catch (Exception e) {
+      return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    }
   }
 
 }
