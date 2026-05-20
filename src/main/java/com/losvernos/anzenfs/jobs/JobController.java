@@ -26,7 +26,7 @@ public class JobController {
   @PostMapping("/new")
   public ResponseEntity<?> createJob(@RequestBody UploadJobCreationRequest request) {
 
-    var jobId = jobService.createJob(request.parentUuid(), request.manifest());
+    var jobId = jobService.createUploadJob(request.parentUuid(), request.manifest());
     return ResponseEntity.ok(Map.of("jobId", jobId));
   }
 

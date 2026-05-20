@@ -1,10 +1,29 @@
-:host {
-  display: flex;
-  flex-direction: column;
+.files-workspace-layout {
+  position: relative;
+  width: 100%;
   height: 100%;
-}
 
-app-store {
-  flex: 1;
-  min-height: 0;
+  // Clean stacking system using CSS Grid
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+
+  app-store {
+    grid-column: 1 / 1;
+    grid-row: 1 / 1;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  app-upload {
+    grid-column: 1 / 1;
+    grid-row: 1 / 1;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+
+    pointer-events: none;
+  }
 }

@@ -1,0 +1,46 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.workspace-drop-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  pointer-events: none;
+
+  &.active-drag-catch {
+    pointer-events: auto;
+  }
+}
+
+.glass-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(24, 144, 255, 0.08);
+  border: 2px dashed var(--ant-primary-color, #1890ff);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  pointer-events: auto;
+  cursor: pointer;
+
+  .overlay-inner-message {
+    text-align: center;
+    color: var(--ant-primary-color, #1890ff);
+
+    pointer-events: none;
+
+    nz-icon { font-size: 56px; margin-bottom: 12px; }
+    h2 { font-size: 20px; font-weight: 500; color: #1890ff; margin: 0; }
+  }
+}

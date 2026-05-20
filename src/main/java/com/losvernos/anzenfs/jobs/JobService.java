@@ -12,13 +12,13 @@ public class JobService {
   @Autowired
   private JobRepository jobRepository;
 
-  public String createJob(String parentUuid, List<String> manifest) {
+  public String createUploadJob(String parentUuid, List<String> manifest) {
     String jobId = UUID.randomUUID().toString();
     var totalFiles = manifest.size();
 
     //TODO: handle manifest
 
-    jobRepository.insertJob(jobId, parentUuid, totalFiles);
+    jobRepository.insertJob(jobId, parentUuid, totalFiles, "UPLOAD");
 
     return jobId;
   }

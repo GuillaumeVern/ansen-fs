@@ -3,7 +3,7 @@ import {
   computed,
   effect,
   ElementRef,
-  inject,
+  inject, input,
   OnInit,
   signal,
   viewChild,
@@ -12,6 +12,10 @@ import {
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { StoreService } from '../../services/store';
 import { StoreElement } from './store-element/store-element';
+import {NzBreadCrumbComponent, NzBreadCrumbItemComponent} from 'ng-zorro-antd/breadcrumb';
+import {Upload} from '../upload/upload';
+import {NzIconDirective} from 'ng-zorro-antd/icon';
+import {NzButtonComponent} from 'ng-zorro-antd/button';
 
 export interface FileNode {
   uuid: string
@@ -24,7 +28,7 @@ export interface FileNode {
 
 @Component({
   selector: 'app-store',
-  imports: [ScrollingModule, StoreElement],
+  imports: [ScrollingModule, StoreElement, NzBreadCrumbComponent, NzBreadCrumbItemComponent, NzIconDirective, NzButtonComponent],
   templateUrl: './store.html',
   styleUrl: './store.scss',
 })
@@ -36,13 +40,21 @@ export class Store implements OnInit {
 
   protected fileNodes = this.storeService.fileNodes;
   protected isLoading = this.storeService.isLoading;
+  protected arianeHistory = this.storeService.ariane;
 
-  protected readonly itemHeight = 200;
-  protected readonly minItemWidth = 200;
+  protected isDraggingOver = false;
+
+  protected readonly itemHeight = 320;
+  protected readonly itemWidth = 200;
   private containerWidth = signal(0);
 
+  public uploadController = input<Upload | null>(null);
+
   protected columns = computed(() => {
-    return Math.max(1, Math.floor(this.containerWidth() / this.minItemWidth));
+    const width = this.containerWidth();
+    if (width === 0) return 1;
+
+    return Math.max(1, Math.floor(width / (this.itemWidth + 20)));
   });
 
   protected rows = computed(() => {
@@ -93,5 +105,9 @@ export class Store implements OnInit {
 
   trackByRow(i: number, row: any[]) {
     return row[0]?.uuid || i;
+  }
+
+  navigateToIndex(targetIndex: number) {
+    this.storeService.jumpToBreadcrumbIndex(targetIndex);
   }
 }

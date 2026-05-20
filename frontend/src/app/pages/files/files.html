@@ -1,2 +1,5 @@
-<app-upload></app-upload>
-<app-store></app-store>
+<div class="files-workspace-layout">
+  <app-upload #uploader />
+
+  <app-store [uploadController]="uploader" />
+</div>

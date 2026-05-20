@@ -81,12 +81,13 @@ public class DBInitializer {
       stmt.execute();
 
       stmt = conn.prepareStatement("""
-        CREATE TABLE IF NOT EXISTS upload_jobs (
-          job_id TEXT PRIMARY KEY,
-          parent_uuid TEXT NOT NULL,
-          total_files INTEGER NOT NULL,
-          status TEXT DEFAULT 'PENDING',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          CREATE TABLE IF NOT EXISTS jobs (
+            job_id TEXT PRIMARY KEY,
+            parent_uuid TEXT NOT NULL,
+            total_files INTEGER NOT NULL,
+            job_type TEXT DEFAULT 'UPLOAD',
+            status TEXT DEFAULT 'PENDING',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
     """);
       stmt.execute();

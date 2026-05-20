@@ -1,5 +1,52 @@
+.card-cover-wrapper {
+  height: 140px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--ant-background-color-base, #f5f5f5);
+  overflow: hidden;
+  border-bottom: 1px solid var(--ant-border-color-split, #f0f0f0);
+
+  .preview-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .file-icon-placeholder {
+    font-size: 42px;
+    color: var(--ant-disabled-color, #b8b8b8);
+  }
+}
+
+.card-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.progress-overlay {
+  margin-top: 8px;
+  font-size: 12px;
+
+  .progress-bar-container {
+    width: 100%;
+    color: var(--ant-disabled-color, #b8b8b8);
+    border-radius: 2px;
+    height: 4px;
+    overflow: hidden;
+
+    .progress-bar {
+      height: 100%;
+      background-color: var(--ant-primary-color, #1890ff);
+      transition: width 0.1s linear;
+    }
+  }
+}
+
 nz-card {
-  border-radius: 10px;
-  width:100%;
   height: 100%;
+  width: 100%;
+  overflow: hidden;
 }

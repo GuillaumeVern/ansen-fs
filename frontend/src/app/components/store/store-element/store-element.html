@@ -1,10 +1,18 @@
-<nz-card nzHoverable [nzCover]="coverTemplate" (click)="open()">
-  <nz-card-meta nzTitle="{{data.name}}" nzDescription="type: {{data.type}}, size: {{data.size}}" />
-  <button nz-button nzType="primary" nzSize="large" nzShape="circle" (click)="download(); $event.stopPropagation()">
-    <nz-icon nzType="download" />
-  </button>
+<nz-card nzHoverable
+         [nzCover]="coverTemplate"
+         (click)="open()">
+
+  <nz-card-meta [nzTitle]="data.name"
+                [nzDescription]="data.type === 'FOLDER' ? 'Folder' : (data.size | number) + ' bytes'" />
+
+  <div class="card-actions">
+    <button nz-button nzType="primary" nzSize="small" nzShape="circle" (click)="download(); $event.stopPropagation()">
+      <nz-icon nzType="download" />
+    </button>
+  </div>
+
   @if (isDownloading) {
-    <div>
+    <div class="progress-overlay" (click)="$event.stopPropagation()">
       <p>Downloading... {{ progress }}%</p>
       <div class="progress-bar-container">
         <div class="progress-bar" [style.width.%]="progress"></div>
@@ -12,6 +20,18 @@
     </div>
   }
 </nz-card>
+
 <ng-template #coverTemplate>
-  <img alt="preview" src="" />
+  <div class="card-cover-wrapper">
+    @if (isSupportedImage(data.name)) {
+      <img [alt]="data.name"
+           [src]="'/api/files/preview/' + data.uuid"
+           loading="lazy"
+           class="preview-thumb" />
+    } @else {
+      <div class="file-icon-placeholder">
+        <nz-icon [nzType]="data.type === 'FOLDER' ? 'folder' : 'file'" />
+      </div>
+    }
+  </div>
 </ng-template>

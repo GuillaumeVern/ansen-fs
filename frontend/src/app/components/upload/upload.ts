@@ -1,7 +1,9 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, inject } from '@angular/core';
+import {Component, ElementRef, inject, viewChild} from '@angular/core';
 import {concatMap, from} from 'rxjs';
 import {StoreService} from '../../services/store';
+import {NzButtonModule} from 'ng-zorro-antd/button';
+import {NzIconModule} from 'ng-zorro-antd/icon';
 
 interface CreateJobRequest {
   parentUuid: string | null
@@ -11,12 +13,18 @@ interface CreateJobRequest {
 
 @Component({
   selector: 'app-upload',
-  imports: [],
+  imports: [
+    NzButtonModule,
+    NzIconModule,
+  ],
   templateUrl: './upload.html',
   styleUrl: './upload.scss',
 })
 export class Upload {
   selectedFiles: File[] = [];
+
+  private fileInputRef = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private folderInputRef = viewChild<ElementRef<HTMLInputElement>>('folderInput');
 
   private http = inject(HttpClient);
   protected storeService = inject(StoreService);
@@ -42,69 +50,95 @@ export class Upload {
     const items = event.dataTransfer?.items;
     if (!items) return;
 
-    const filePromises: Promise<File>[] = [];
+    const filePromises: Promise<File[]>[] = [];
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (item.kind === 'file') {
         const entry = item.webkitGetAsEntry();
         if (entry) {
-          this.traverseFileTree(entry, '', filePromises);
+          filePromises.push(this.traverseFileTree(entry, ''));
         }
       }
     }
 
-    const resolvedFiles = await Promise.all(filePromises);
-    this.selectedFiles = [...this.selectedFiles, ...resolvedFiles];
-    console.log(`Parsed total of ${this.selectedFiles.length} files from drag-and-drop.`);
+    try {
+      const resolvedGroups = await Promise.all(filePromises);
+
+      const flattenedFiles = resolvedGroups.flat();
+
+      this.selectedFiles = [...this.selectedFiles, ...flattenedFiles];
+
+      if (this.selectedFiles.length > 0) {
+        this.uploadItems();
+      }
+    } catch (err) {
+      console.error("Failed parsing dragged items:", err);
+    }
   }
 
-  private traverseFileTree(entry: any, path: string, filePromises: Promise<File>[]) {
-    if (entry.isFile) {
-      filePromises.push(new Promise((resolve, reject) => {
+  cancelDragOverlay(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.isDraggingOver = false;
+  }
+
+  private traverseFileTree(entry: any, path: string): Promise<File[]> {
+    return new Promise((resolve, reject) => {
+      if (entry.isFile) {
         entry.file((file: File) => {
           const relativePath = path ? `${path}${entry.name}` : entry.name;
           Object.defineProperty(file, 'webkitRelativePath', {
             value: relativePath,
             writable: false
           });
-          resolve(file);
+          resolve([file]);
         }, reject);
-      }));
-    } else if (entry.isDirectory) {
-      const dirReader = entry.createReader();
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const allFiles: File[] = [];
 
-      const readEntries = () => {
-        dirReader.readEntries((entries: any[]) => {
-          if (entries.length > 0) {
-            for (const subEntry of entries) {
-              this.traverseFileTree(subEntry, `${path}${entry.name}/`, filePromises);
+        const readEntries = () => {
+          dirReader.readEntries(async (entries: any[]) => {
+            if (entries.length === 0) {
+              resolve(allFiles);
+            } else {
+              const subPromises = entries.map(subEntry =>
+                this.traverseFileTree(subEntry, `${path}${entry.name}/`)
+              );
+
+              const subFilesGroups = await Promise.all(subPromises);
+              allFiles.push(...subFilesGroups.flat());
+
+              readEntries();
             }
-            readEntries();
-          }
-        });
-      };
-      readEntries();
-    }
+          }, reject);
+        };
+
+        readEntries();
+      } else {
+        resolve([]);
+      }
+    });
   }
 
   onItemsSelected(event: any) {
     this.selectedFiles = Array.from(event.target.files);
   }
 
-  uploadItems(currentFolderUuid: string) {
-    console.log("currentfolderuuid:", currentFolderUuid)
+  uploadItems() {
     if (this.selectedFiles.length === 0) return;
+
+    const currentFolderUuid = this.storeService.currentParentUuid();
 
     let formData: CreateJobRequest = {
       parentUuid: currentFolderUuid,
       totalFiles: this.selectedFiles.length,
       manifest: [],
     };
-    console.log(this.selectedFiles)
 
     let paths: string[] = [];
-
     this.selectedFiles.forEach((file: File) => {
       const relativePath = file.webkitRelativePath || file.name;
       paths.push(relativePath);
@@ -113,10 +147,10 @@ export class Upload {
 
     this.http.post('/api/files/jobs/new', formData).subscribe({
       next: (response: any) => {
-        console.log('Upload started, Job ID:', response.jobId);
-        this.uploadFiles(response.jobId, currentFolderUuid)
+        console.log('Upload job generated:', response.jobId);
+        this.uploadFiles(response.jobId, currentFolderUuid);
       },
-      error: (err: any) => console.error('Upload failed', err)
+      error: (err: any) => console.error('Upload allocation failure:', err)
     });
   }
 
@@ -146,7 +180,16 @@ export class Upload {
       complete: () => {
         console.log('All chunks have been uploaded!')
         this.selectedFiles = [];
+        this.storeService.loadFiles(true);
       }
     });
+  }
+
+  public triggerFileInput(): void {
+    this.fileInputRef()?.nativeElement.click();
+  }
+
+  public triggerFolderInput(): void {
+    this.folderInputRef()?.nativeElement.click();
   }
 }

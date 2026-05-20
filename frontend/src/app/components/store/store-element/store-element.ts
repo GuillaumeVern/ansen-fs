@@ -26,7 +26,7 @@ export class StoreElement {
 
   open() {
     if (this.data.type === 'FOLDER') {
-      this.storeService.changeParent(this.data.uuid);
+      this.storeService.changeParent(this.data.name, this.data.uuid);
     }
   }
 
@@ -65,5 +65,11 @@ export class StoreElement {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  isSupportedImage(fileName: string): boolean {
+    if (!fileName) return false;
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension || '');
   }
 }

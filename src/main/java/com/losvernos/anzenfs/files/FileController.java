@@ -5,10 +5,12 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -86,6 +88,38 @@ public class FileController {
     } catch (Exception e) {
       return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
     }
+  }
+
+  @GetMapping("/preview/{externalId}")
+  public ResponseEntity<Resource> getFilePreview(@PathVariable String externalId) {
+    try {
+      ResourceAndName fileInfo = fileService.prepareDownload(externalId);
+      Path originalPath = Paths.get(fileInfo.resource().getURI());
+
+      String contentType = Files.probeContentType(originalPath);
+      if (contentType == null) {
+        contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+      }
+
+      Path previewPath = resolvePreviewMirrorPath(originalPath);
+
+      Resource resource = new UrlResource(previewPath.toUri());
+
+      return ResponseEntity.ok()
+              .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+              .contentType(MediaType.parseMediaType(contentType))
+              .contentLength(resource.contentLength())
+              .body(resource);
+
+    } catch (FileNotFoundException e) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    } catch (Exception e) {
+      return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    }
+  }
+
+  private Path resolvePreviewMirrorPath(Path originalPath) {
+    return originalPath;
   }
 
 }

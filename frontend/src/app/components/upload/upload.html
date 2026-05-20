@@ -1,23 +1,20 @@
-<div class="drop-zone"
+<div class="workspace-drop-wrapper"
+     [class.active-drag-catch]="isDraggingOver"
+     (window:dragover)="onDragOver($any($event))"
      (dragover)="onDragOver($event)"
      (dragleave)="onDragLeave($event)"
-     (drop)="onFileDrop($event)"
-     [class.active]="isDraggingOver">
+     (drop)="onFileDrop($event)">
 
-  <p>Drag & Drop files OR folders here</p>
-  <span>— OR —</span>
+  @if (isDraggingOver) {
+    <div class="glass-drop-overlay" (click)="cancelDragOverlay($event)">
+      <div class="overlay-inner-message">
+        <nz-icon nzType="cloud-upload" />
+        <h2>Drop anywhere to upload items</h2>
+        <p style="margin-top: 8px; font-size: 14px; opacity: 0.8;">(click anywhere to cancel)</p>
+      </div>
+    </div>
+  }
 
-  <div class="upload-actions">
-    <input type="file" #fileInput multiple (change)="onItemsSelected($event)" style="display: none;">
-    <input type="file" #folderInput webkitdirectory directory multiple (change)="onItemsSelected($event)" style="display: none;">
-
-    <button (click)="fileInput.click(); $event.stopPropagation()">Choose Files</button>
-    <button (click)="folderInput.click(); $event.stopPropagation()">Choose Folder</button>
-  </div>
+  <input type="file" #fileInput multiple (change)="onItemsSelected($event); uploadItems()" style="display: none;">
+  <input type="file" #folderInput webkitdirectory directory multiple (change)="onItemsSelected($event); uploadItems()" style="display: none;">
 </div>
-
-@if (selectedFiles.length > 0) {
-  <button nz-button nzType="primary" (click)="uploadItems(storeService.currentParentUuid())">
-    Confirm Upload of {{ selectedFiles.length }} items
-  </button>
-}
