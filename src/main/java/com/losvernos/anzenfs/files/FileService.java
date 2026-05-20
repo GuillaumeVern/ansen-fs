@@ -29,7 +29,7 @@ public class FileService {
 
   private final Path stagingDir = new File(FileUtils.getDataDir(), "staging").toPath();
 
-  public ResourceAndName prepareDownload(String externalId) throws FileNotFoundException, MalformedURLException {
+  public ResourceAndName getResourceAndName(String externalId) throws FileNotFoundException, MalformedURLException {
     String relativePath = fileRepository.getFullPath(externalId);
 
     if (relativePath == null) {
@@ -128,5 +128,56 @@ public class FileService {
     } catch (NoSuchAlgorithmException e) {
       throw new RuntimeException("SHA-256 algorithm not found", e);
     }
+  }
+
+  public boolean deleteItemByExternalId(String externalId) {
+    String primaryRelativePath = fileRepository.getFullPath(externalId);
+    if (primaryRelativePath == null) {
+      return false;
+    }
+
+    List<String[]> targets = fileRepository.deleteItemAndGetDescendantPaths(externalId);
+    if (targets.isEmpty()) {
+      return false;
+    }
+
+    for (String[] metadata : targets) {
+      String itemExternalId = metadata[0];
+      String itemType = metadata[2];
+
+      try {
+        if (!"FOLDER".equals(itemType)) {
+          String fileRelativePath = fileRepository.getFullPath(itemExternalId);
+
+          if (fileRelativePath == null) {
+            fileRelativePath = primaryRelativePath;
+          }
+
+          Path physicalFilePath = storageRoot.resolve(fileRelativePath).normalize();
+          if (Files.exists(physicalFilePath) && !Files.isDirectory(physicalFilePath)) {
+            Files.delete(physicalFilePath);
+          }
+        }
+      } catch (IOException e) {
+        System.err.println("Failed to delete physical file asset: " + e.getMessage());
+      }
+    }
+
+    try {
+      Path rootTargetFolder = storageRoot.resolve(primaryRelativePath).normalize();
+      if (Files.exists(rootTargetFolder) && Files.isDirectory(rootTargetFolder)) {
+        try (var walk = Files.walk(rootTargetFolder)) {
+          walk.sorted(java.util.Comparator.reverseOrder())
+                  .map(Path::toFile)
+                  .forEach(File::delete);
+        }
+      } else if (Files.exists(rootTargetFolder)) {
+        Files.delete(rootTargetFolder);
+      }
+    } catch (IOException e) {
+      System.err.println("Error cleaning filesystem directory structures: " + e.getMessage());
+    }
+
+    return true;
   }
 }

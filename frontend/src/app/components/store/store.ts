@@ -110,4 +110,12 @@ export class Store implements OnInit {
   navigateToIndex(targetIndex: number) {
     this.storeService.jumpToBreadcrumbIndex(targetIndex);
   }
+
+  deleteItem(uuid: string): void {
+    this.storeService.deleteItem(uuid).then(success => {
+      if (!success) {
+        alert('Could not complete the file deletion action. Please try again.');
+      }
+    });
+  }
 }

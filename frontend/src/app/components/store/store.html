@@ -39,7 +39,7 @@
 
     <div *cdkVirtualFor="let row of rows(); trackBy: trackByRow" class="grid-row">
       @for (node of row; track node.uuid) {
-        <app-store-element [data]="node" class="grid-item" />
+        <app-store-element [data]="node" class="grid-item" (delete)="deleteItem($event)"/>
       }
     </div>
   </cdk-virtual-scroll-viewport>

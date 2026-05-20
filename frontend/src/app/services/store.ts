@@ -98,4 +98,21 @@ export class StoreService {
       observe: 'events'
     });
   }
+
+  async deleteItem(uuid: string): Promise<boolean> {
+    try {
+      await firstValueFrom(
+        this.http.delete(`/api/files/${uuid}`, { responseType: 'text' })
+      );
+
+      this.nodes.update(currentNodes => currentNodes.filter(node => node.uuid !== uuid));
+
+      console.log(`Resource ${uuid} successfully removed from server and state grid layout.`);
+      return true;
+
+    } catch (err) {
+      console.error(`Failed to delete resource item ${uuid}:`, err);
+      return false;
+    }
+  }
 }

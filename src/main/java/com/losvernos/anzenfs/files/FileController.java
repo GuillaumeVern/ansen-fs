@@ -74,7 +74,7 @@ public class FileController {
   @GetMapping("/download/{externalId}")
   public ResponseEntity<Resource> downloadFile(@PathVariable String externalId) {
     try {
-      ResourceAndName downloadInfo = fileService.prepareDownload(externalId);
+      ResourceAndName downloadInfo = fileService.getResourceAndName(externalId);
       long contentLength = downloadInfo.resource().contentLength();
 
       return ResponseEntity.ok()
@@ -93,7 +93,7 @@ public class FileController {
   @GetMapping("/preview/{externalId}")
   public ResponseEntity<Resource> getFilePreview(@PathVariable String externalId) {
     try {
-      ResourceAndName fileInfo = fileService.prepareDownload(externalId);
+      ResourceAndName fileInfo = fileService.getResourceAndName(externalId);
       Path originalPath = Paths.get(fileInfo.resource().getURI());
 
       String contentType = Files.probeContentType(originalPath);
@@ -115,6 +115,27 @@ public class FileController {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
     } catch (Exception e) {
       return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    }
+  }
+
+  @DeleteMapping("/{externalId}")
+  public ResponseEntity<String> deleteFileOrFolder(@PathVariable String externalId) {
+    try {
+      boolean isDeleted = fileService.deleteItemByExternalId(externalId);
+
+      if (!isDeleted) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body("Item with ID " + externalId + " not found.");
+      }
+
+      return ResponseEntity
+              .ok("Item successfully deleted.");
+
+    } catch (Exception e) {
+      return ResponseEntity
+              .status(HttpStatus.INTERNAL_SERVER_ERROR)
+              .body("An error occurred while deleting the item: " + e.getMessage());
     }
   }
 

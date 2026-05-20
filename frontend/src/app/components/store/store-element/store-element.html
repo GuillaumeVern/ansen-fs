@@ -9,6 +9,16 @@
     <button nz-button nzType="primary" nzSize="small" nzShape="circle" (click)="download(); $event.stopPropagation()">
       <nz-icon nzType="download" />
     </button>
+
+    <button
+      nz-button
+      nzType="primary"
+      nzDanger
+      nzSize="small"
+      nzShape="circle"
+      (click)="onDeleteClick($event)">
+      <nz-icon nzType="delete" />
+    </button>
   </div>
 
   @if (isDownloading) {

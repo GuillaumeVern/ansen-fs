@@ -172,4 +172,70 @@ public class FileRepository {
 
     return resultPath;
   }
+
+  public List<String[]> deleteItemAndGetDescendantPaths(String externalId) {
+    List<String[]> deletedMetadata = new ArrayList<>();
+
+    String selectSql = """
+        WITH RECURSIVE item_tree(file_id, external_id, name, type, parent_id) AS (
+          SELECT file_id, external_id, name, type, parent_id
+          FROM files
+          WHERE external_id = ?
+          UNION ALL
+          SELECT f.file_id, f.external_id, f.name, f.type, f.parent_id
+          FROM files f
+          JOIN item_tree it ON f.parent_id = it.file_id
+        )
+        SELECT external_id, name, type FROM item_tree;
+        """;
+
+    String deleteSql = """
+        WITH RECURSIVE item_tree(file_id) AS (
+          SELECT file_id FROM files WHERE external_id = ?
+          UNION ALL
+          SELECT f.file_id FROM files f
+          JOIN item_tree it ON f.parent_id = it.file_id
+        )
+        DELETE FROM files WHERE file_id IN (SELECT file_id FROM item_tree);
+        """;
+
+    try {
+      var connection = DBManager.getInstance().getConnection();
+      connection.setAutoCommit(false);
+
+      try {
+        try (var selectStmt = connection.prepareStatement(selectSql)) {
+          selectStmt.setString(1, externalId);
+          try (var rs = selectStmt.executeQuery()) {
+            while (rs.next()) {
+              deletedMetadata.add(new String[]{
+                      rs.getString("external_id"),
+                      rs.getString("name"),
+                      rs.getString("type")
+              });
+            }
+          }
+        }
+
+        if (!deletedMetadata.isEmpty()) {
+          try (var deleteStmt = connection.prepareStatement(deleteSql)) {
+            deleteStmt.setString(1, externalId);
+            deleteStmt.executeUpdate();
+          }
+        }
+
+        connection.commit();
+      } catch (SQLException ex) {
+        connection.rollback();
+        throw ex;
+      } finally {
+        connection.setAutoCommit(true);
+      }
+
+    } catch (SQLException e) {
+      e.printStackTrace();
+    }
+
+    return deletedMetadata;
+  }
 }

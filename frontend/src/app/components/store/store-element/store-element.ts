@@ -1,10 +1,11 @@
-import {ChangeDetectorRef, Component, inject, Input} from '@angular/core';
+import {ChangeDetectorRef, Component, inject, Input, output} from '@angular/core';
 import {StoreService} from '../../../services/store';
 import {FileNode} from '../store';
 import {NzCardComponent, NzCardMetaComponent} from 'ng-zorro-antd/card';
 import {NzButtonModule} from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import {HttpEvent, HttpEventType} from '@angular/common/http';
+import {DecimalPipe} from '@angular/common';
 
 @Component({
   selector: 'app-store-element',
@@ -13,6 +14,7 @@ import {HttpEvent, HttpEventType} from '@angular/common/http';
     NzCardMetaComponent,
     NzButtonModule,
     NzIconModule,
+    DecimalPipe,
   ],
   templateUrl: './store-element.html',
   styleUrl: './store-element.scss',
@@ -23,6 +25,7 @@ export class StoreElement {
   private cdr = inject(ChangeDetectorRef);
   isDownloading = false;
   progress = 0;
+  public delete = output<string>();
 
   open() {
     if (this.data.type === 'FOLDER') {
@@ -71,5 +74,14 @@ export class StoreElement {
     if (!fileName) return false;
     const extension = fileName.split('.').pop()?.toLowerCase();
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension || '');
+  }
+
+  onDeleteClick(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (confirm(`Are you sure you want to delete "${this.data.name}"?`)) {
+      this.delete.emit(this.data.uuid);
+    }
   }
 }
