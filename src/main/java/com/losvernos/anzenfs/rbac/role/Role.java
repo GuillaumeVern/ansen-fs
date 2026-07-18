@@ -22,4 +22,9 @@ public class Role {
   private String name;
 
   private List<Permission> permissions;
+
+  public Role(String name) {
+    this.name = name;
+    this.permissions = new java.util.ArrayList<>();
+  }
 }

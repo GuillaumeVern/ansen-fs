@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.losvernos.anzenfs.rbac.role.Role;
+import com.losvernos.anzenfs.rbac.user.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -80,14 +82,18 @@ public class FileService {
     }
   }
 
-  public List<FileNode> getChildrenAfter(String parentUuid, String lastFileName, int limit) {
+  public List<FileNode> getChildrenAfter(String parentUuid, String lastFileName, int limit, User currentUser) {
     Integer parentId = null;
 
     if (parentUuid != null && !Objects.equals(parentUuid, "")) {
       parentId = fileRepository.findIdByUuid(parentUuid).orElseThrow(() -> new RuntimeException("Folder not found"));
     }
 
-    return fileRepository.getChildrenAfter(parentId, lastFileName, parentUuid, limit);
+    List<Role> roles = currentUser.getUserRoles() != null
+            ? currentUser.getUserRoles()
+            : List.of();
+
+    return fileRepository.getChildrenAfter(parentId, lastFileName, parentUuid, limit, roles);
   }
 
   private Integer resolveFolderHierarchy(Integer rootId, Path path) {

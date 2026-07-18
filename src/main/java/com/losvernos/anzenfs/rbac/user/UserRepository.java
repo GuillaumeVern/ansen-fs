@@ -1,7 +1,6 @@
 package com.losvernos.anzenfs.rbac.user;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,335 +8,259 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import com.losvernos.anzenfs.database.DBManager;
 import com.losvernos.anzenfs.rbac.permission.Permission;
 import com.losvernos.anzenfs.rbac.role.Role;
 
 @Service
 public class UserRepository {
 
-  @Autowired
-  private PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
+    private final PasswordEncoder passwordEncoder;
 
-  public List<User> getAll() {
-    var conn = DBManager.getInstance().getConnection();
-    List<User> usersList = new ArrayList<User>();
-
-    try {
-      var stmt = conn.prepareStatement("""
-            SELECT * FROM users;
-          """);
-      var resultSet = stmt.executeQuery();
-      usersList = mapResultSetToUsers(resultSet);
-    } catch (SQLException e) {
-      e.printStackTrace();
+    public UserRepository(JdbcTemplate jdbcTemplate, PasswordEncoder passwordEncoder) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.passwordEncoder = passwordEncoder;
     }
 
-    return usersList;
-  }
+    private final RowMapper<User> userRowMapper = (rs, rowNum) -> {
+        User user = new User();
+        user.setID(rs.getLong("user_id"));
+        user.setUsername(rs.getString("username"));
+        user.setPassword(rs.getString("password"));
+        return user;
+    };
 
-  public Optional<User> get(long ID) {
-    var conn = DBManager.getInstance().getConnection();
-    Optional<User> result = Optional.empty();
-
-    try {
-      var stmt = conn.prepareStatement("""
-            SELECT * FROM users WHERE users.user_id = ?;
-          """);
-
-      stmt.setInt(1, (int) ID);
-      var resultSet = stmt.executeQuery();
-      var usersList = mapResultSetToUsers(resultSet);
-      try {
-        result = Optional.of(usersList.getFirst());
-      } catch (NoSuchElementException e) {
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
+    public List<User> getAll() {
+        String sql = "SELECT * FROM users;";
+        return jdbcTemplate.query(sql, userRowMapper);
     }
 
-    return result;
-  }
-
-  public Optional<User> findByUsername(String username) {
-    var conn = DBManager.getInstance().getConnection();
-    Optional<User> result = Optional.empty();
-
-    try {
-      var stmt = conn.prepareStatement("""
-            SELECT * FROM users WHERE users.username = ?;
-          """);
-
-      stmt.setString(1, username);
-      var resultSet = stmt.executeQuery();
-      var usersList = mapResultSetToUsers(resultSet);
-      try {
-        result = Optional.of(usersList.getFirst());
-      } catch (NoSuchElementException e) {
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
+    public Optional<User> get(long ID) {
+        String sql = "SELECT * FROM users WHERE user_id = ?;";
+        try {
+            User user = jdbcTemplate.queryForObject(sql, userRowMapper, ID);
+            return Optional.ofNullable(user);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
     }
 
-    return result;
-  }
+    public Optional<User> findByUsername(String username) {
+        String sql = "SELECT * FROM users WHERE username = ?;";
+        try {
+            User user = jdbcTemplate.queryForObject(sql, userRowMapper, username);
+            return Optional.ofNullable(user);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
 
-  public Optional<User> findByUsernameWithRolesAndPermissions(String username) {
-    var conn = DBManager.getInstance().getConnection();
-
-    try (var stmt = conn.prepareStatement("""
-        SELECT
-          u.user_id,
-          u.username,
-          u.password,
-          r.role_id,
-          r.role_name,
-          p.permission_id,
-          p.permission_name
-        FROM users u
-        LEFT JOIN user_roles ur ON ur.user_id = u.user_id
-        LEFT JOIN roles r ON r.role_id = ur.role_id
-        LEFT JOIN role_permissions rp ON rp.role_id = r.role_id
-        LEFT JOIN permissions p ON p.permission_id = rp.permission_id
-        WHERE u.username = ?;
-        """)) {
-
-      stmt.setString(1, username);
-
-      try (var rs = stmt.executeQuery()) {
-        User user = null;
+    public Optional<User> findByUsernameWithRolesAndPermissions(String username) {
+        String sql = """
+                SELECT
+                  u.user_id, u.username, u.password,
+                  r.role_id, r.role_name,
+                  p.permission_id, p.permission_name
+                FROM users u
+                LEFT JOIN user_roles ur ON ur.user_id = u.user_id
+                LEFT JOIN roles r ON r.role_id = ur.role_id
+                LEFT JOIN role_permissions rp ON rp.role_id = r.role_id
+                LEFT JOIN permissions p ON p.permission_id = rp.permission_id
+                WHERE u.username = ?;
+                """;
 
         Map<Long, Role> rolesById = new LinkedHashMap<>();
         Map<Long, Set<Long>> permissionIdsByRole = new HashMap<>();
+        final User[] userContainer = new User[1];
 
-        while (rs.next()) {
-          if (user == null) {
-            user = new User();
-            user.setID(rs.getLong("user_id"));
-            user.setUsername(rs.getString("username"));
-            user.setPassword(rs.getString("password"));
-          }
-
-          long roleId = rs.getLong("role_id");
-          if (!rs.wasNull()) {
-            Role role = rolesById.get(roleId);
-            if (role == null) {
-              role = new Role();
-              role.setName(rs.getString("role_name"));
-              role.setPermissions(new ArrayList<>());
-              rolesById.put(roleId, role);
-              permissionIdsByRole.put(roleId, new HashSet<>());
+        jdbcTemplate.query(sql, rs -> {
+            if (userContainer[0] == null) {
+                userContainer[0] = new User();
+                userContainer[0].setID(rs.getLong("user_id"));
+                userContainer[0].setUsername(rs.getString("username"));
+                userContainer[0].setPassword(rs.getString("password"));
             }
 
-            long permissionId = rs.getLong("permission_id");
-            if (!rs.wasNull() && permissionIdsByRole.get(roleId).add(permissionId)) {
-              Permission permission = new Permission();
-              permission.setName(rs.getString("permission_name"));
-              role.getPermissions().add(permission);
+            long roleId = rs.getLong("role_id");
+            if (!rs.wasNull()) {
+                Role role = rolesById.computeIfAbsent(roleId, id -> {
+                    Role r = new Role();
+                    try {
+                        r.setID(id);
+                        r.setName(rs.getString("role_name"));
+                        r.setPermissions(new ArrayList<>());
+                    } catch (Exception ex) {
+                        throw new RuntimeException(ex);
+                    }
+                    permissionIdsByRole.put(id, new HashSet<>());
+                    return r;
+                });
+
+                long permissionId = rs.getLong("permission_id");
+                if (!rs.wasNull() && permissionIdsByRole.get(roleId).add(permissionId)) {
+                    Permission permission = new Permission();
+                    permission.setID(permissionId);
+                    permission.setName(rs.getString("permission_name"));
+                    role.getPermissions().add(permission);
+                }
             }
-          }
+        }, username);
+
+        if (userContainer[0] == null) {
+            return Optional.empty();
         }
 
-        if (user == null) {
-          return Optional.empty();
-        }
-
-        user.setUserRoles(new ArrayList<>(rolesById.values()));
-        return Optional.of(user);
-      }
-
-    } catch (SQLException e) {
-      e.printStackTrace();
-      return Optional.empty();
+        userContainer[0].setUserRoles(new ArrayList<>(rolesById.values()));
+        return Optional.of(userContainer[0]);
     }
-  }
 
-  public void save(User elementToSave) {
-    var conn = DBManager.getInstance().getConnection();
+    @Transactional
+    public void save(User elementToSave) {
+        String userSql = "INSERT INTO users (username, password) VALUES (?, ?);";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
 
-    try {
-      conn.setAutoCommit(false);
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(userSql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, elementToSave.getUsername());
+            ps.setString(2, passwordEncoder.encode(elementToSave.getPassword()));
+            return ps;
+        }, keyHolder);
 
-      long userId;
-      try (var userStmt = conn.prepareStatement("""
-          INSERT INTO users (username, password)
-          VALUES (?, ?);
-          """, Statement.RETURN_GENERATED_KEYS)) {
-
-        userStmt.setString(1, elementToSave.getUsername());
-        userStmt.setString(2, passwordEncoder.encode(elementToSave.getPassword()));
-        userStmt.executeUpdate();
-
-        try (var keys = userStmt.getGeneratedKeys()) {
-          if (!keys.next()) {
-            throw new SQLException("Failed to create user: no generated key returned.");
-          }
-          userId = keys.getLong(1);
+        Number key = keyHolder.getKey();
+        if (key == null) {
+            throw new RuntimeException("Failed to create user: No generated key returned.");
         }
-      }
+        long userId = key.longValue();
 
-      if (elementToSave.getUserRoles() != null) {
-        for (Role role : elementToSave.getUserRoles()) {
-          long roleId = getOrCreateRoleId(conn, role.getName());
-          linkUserRole(conn, userId, roleId);
+        if (elementToSave.getUserRoles() != null) {
+            for (Role role : elementToSave.getUserRoles()) {
+                long roleId = getOrCreateRoleId(role.getName());
+                linkUserRole(userId, roleId);
 
-          if (role.getPermissions() != null) {
-            for (Permission permission : role.getPermissions()) {
-              long permissionId = getOrCreatePermissionId(conn, permission.getName());
-              linkRolePermission(conn, roleId, permissionId);
+                if (role.getPermissions() != null) {
+                    for (Permission permission : role.getPermissions()) {
+                        long permissionId = getOrCreatePermissionId(permission.getName());
+                        linkRolePermission(roleId, permissionId);
+                    }
+                }
             }
-          }
         }
-      }
-
-      conn.commit();
-    } catch (SQLException e) {
-      try {
-        conn.rollback();
-      } catch (SQLException rollbackEx) {
-        rollbackEx.printStackTrace();
-      }
-      e.printStackTrace();
-    } finally {
-      try {
-        conn.setAutoCommit(true);
-      } catch (SQLException e) {
-        e.printStackTrace();
-      }
-    }
-  }
-
-  private long getOrCreateRoleId(java.sql.Connection conn, String roleName) throws SQLException {
-    try (var select = conn.prepareStatement("SELECT role_id FROM roles WHERE role_name = ?")) {
-      select.setString(1, roleName);
-      try (var rs = select.executeQuery()) {
-        if (rs.next())
-          return rs.getLong("role_id");
-      }
     }
 
-    try (var insert = conn.prepareStatement(
-        "INSERT INTO roles (role_name) VALUES (?)", Statement.RETURN_GENERATED_KEYS)) {
-      insert.setString(1, roleName);
-      insert.executeUpdate();
-      try (var keys = insert.getGeneratedKeys()) {
-        if (keys.next())
-          return keys.getLong(1);
-      }
+    private long getOrCreateRoleId(String roleName) {
+        String selectSql = "SELECT role_id FROM roles WHERE role_name = ?;";
+        try {
+            return jdbcTemplate.queryForObject(selectSql, Long.class, roleName);
+        } catch (EmptyResultDataAccessException e) {
+            String insertSql = "INSERT INTO roles (role_name) VALUES (?);";
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
+                ps.setString(1, roleName);
+                return ps;
+            }, keyHolder);
+            return Objects.requireNonNull(keyHolder.getKey()).longValue();
+        }
     }
 
-    throw new SQLException("Unable to create role: " + roleName);
-  }
-
-  private long getOrCreatePermissionId(java.sql.Connection conn, String permissionName) throws SQLException {
-    try (var select = conn.prepareStatement("SELECT permission_id FROM permissions WHERE permission_name = ?")) {
-      select.setString(1, permissionName);
-      try (var rs = select.executeQuery()) {
-        if (rs.next())
-          return rs.getLong("permission_id");
-      }
+    private long getOrCreatePermissionId(String permissionName) {
+        String selectSql = "SELECT permission_id FROM permissions WHERE permission_name = ?;";
+        try {
+            return jdbcTemplate.queryForObject(selectSql, Long.class, permissionName);
+        } catch (EmptyResultDataAccessException e) {
+            String insertSql = "INSERT INTO permissions (permission_name) VALUES (?);";
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
+                ps.setString(1, permissionName);
+                return ps;
+            }, keyHolder);
+            return Objects.requireNonNull(keyHolder.getKey()).longValue();
+        }
     }
 
-    try (var insert = conn.prepareStatement(
-        "INSERT INTO permissions (permission_name) VALUES (?)", Statement.RETURN_GENERATED_KEYS)) {
-      insert.setString(1, permissionName);
-      insert.executeUpdate();
-      try (var keys = insert.getGeneratedKeys()) {
-        if (keys.next())
-          return keys.getLong(1);
-      }
+    private void linkUserRole(long userId, long roleId) {
+        String sql = """
+                INSERT INTO user_roles (user_id, role_id)
+                SELECT ?, ?
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM user_roles WHERE user_id = ? AND role_id = ?
+                );
+                """;
+        jdbcTemplate.update(sql, userId, roleId, userId, roleId);
     }
 
-    throw new SQLException("Unable to create permission: " + permissionName);
-  }
-
-  private void linkUserRole(java.sql.Connection conn, long userId, long roleId) throws SQLException {
-    try (var link = conn.prepareStatement("""
-        INSERT INTO user_roles (user_id, role_id)
-        SELECT ?, ?
-        WHERE NOT EXISTS (
-          SELECT 1 FROM user_roles WHERE user_id = ? AND role_id = ?
-        )
-        """)) {
-      link.setLong(1, userId);
-      link.setLong(2, roleId);
-      link.setLong(3, userId);
-      link.setLong(4, roleId);
-      link.executeUpdate();
-    }
-  }
-
-  private void linkRolePermission(java.sql.Connection conn, long roleId, long permissionId) throws SQLException {
-    try (var link = conn.prepareStatement("""
-        INSERT INTO role_permissions (role_id, permission_id)
-        SELECT ?, ?
-        WHERE NOT EXISTS (
-          SELECT 1 FROM role_permissions WHERE role_id = ? AND permission_id = ?
-        )
-        """)) {
-      link.setLong(1, roleId);
-      link.setLong(2, permissionId);
-      link.setLong(3, roleId);
-      link.setLong(4, permissionId);
-      link.executeUpdate();
-    }
-  }
-
-  @EventListener(ApplicationReadyEvent.class)
-  public void initAdminAccount() {
-    User adminInDatabase = this.findByUsername("admin").orElse(new User());
-    if (null == adminInDatabase.getUsername()) {
-      User adminAccount = User.builder()
-          .username("admin")
-          .password("admin")
-          .userRoles(
-              List.of(
-                  Role.builder()
-                      .name("ADMIN")
-                      .permissions(
-                          List.of(
-                              Permission.builder()
-                                  .name("ADMIN_READ")
-                                  .build(),
-                              Permission.builder()
-                                  .name("ADMIN_READ")
-                                  .build()))
-                      .build()))
-          .build();
-
-      save(adminAccount);
-    }
-  }
-
-  public void update(User elementToUpdate, String[] params) {
-    System.out.println("update user not implemented");
-  }
-
-  public void delete(User elementToDelete) {
-    System.out.println("delete user not implemented");
-  }
-
-  private List<User> mapResultSetToUsers(ResultSet resultSet) throws SQLException {
-    var userDTOList = new ArrayList<User>();
-
-    while (resultSet.next()) {
-      var userDTO = new User();
-      userDTO.setID(resultSet.getLong("user_id"));
-      userDTO.setUsername(resultSet.getString("username"));
-      userDTO.setPassword(resultSet.getString("password"));
-      userDTOList.add(userDTO);
+    private void linkRolePermission(long roleId, long permissionId) {
+        String sql = """
+                INSERT INTO role_permissions (role_id, permission_id)
+                SELECT ?, ?
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM role_permissions WHERE role_id = ? AND permission_id = ?
+                );
+                """;
+        jdbcTemplate.update(sql, roleId, permissionId, roleId, permissionId);
     }
 
-    return userDTOList;
-  }
+    @EventListener(ApplicationReadyEvent.class)
+    public void initAdminAccount() {
+        User adminInDatabase = this.findByUsername("admin").orElse(new User());
+        if (null == adminInDatabase.getUsername()) {
+            User adminAccount = User.builder()
+                    .username("admin")
+                    .password("admin")
+                    .userRoles(
+                            List.of(
+                                    Role.builder()
+                                            .name("ADMIN")
+                                            .permissions(
+                                                    List.of(
+                                                            Permission.builder().name("ADMIN_READ").build(),
+                                                            Permission.builder().name("ADMIN_WRITE").build() // Fixed likely copy-paste duplicate
+                                                    )
+                                            )
+                                            .build()
+                            )
+                    )
+                    .build();
+
+            save(adminAccount);
+        }
+    }
+
+    public void update(User elementToUpdate, String[] params) {
+        System.out.println("update user not implemented");
+    }
+
+    public void delete(User elementToDelete) {
+        System.out.println("delete user not implemented");
+    }
+
+    public long createPersonalFolder(String folderName, String externalUuid) {
+        String sql = "INSERT INTO files (name, type, external_id, parent_id, file_hash) VALUES (?, 'FOLDER', ?, NULL, '');";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, folderName);
+            ps.setString(2, externalUuid);
+            return ps;
+        }, keyHolder);
+
+        return Objects.requireNonNull(keyHolder.getKey()).longValue();
+    }
 }

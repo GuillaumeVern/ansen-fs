@@ -1,37 +1,22 @@
 package com.losvernos.anzenfs.rbac.auth;
 
-import java.util.List;
-
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import com.losvernos.anzenfs.rbac.user.UserService;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-  private final AuthenticationManager authManager;
-  private final JwtUtils jwtUtils;
+  private final UserService userService;
 
-  public AuthController(AuthenticationManager authManager, JwtUtils jwtUtils) {
-    this.authManager = authManager;
-    this.jwtUtils = jwtUtils;
+  public AuthController(UserService userService) {
+    this.userService = userService;
   }
 
   @PostMapping("/login")
-  public String login(@RequestBody LoginRequest login) {
-    Authentication auth = authManager.authenticate(
-        new UsernamePasswordAuthenticationToken(login.username(), login.password()));
-
-    List<String> roles = auth.getAuthorities().stream()
-        .map(GrantedAuthority::getAuthority)
-        .toList();
-
-    return jwtUtils.generateToken(auth.getName(), roles);
+  public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest loginRequest) {
+    String token = userService.authenticate(loginRequest.username(), loginRequest.password());
+    return ResponseEntity.ok(new AuthResponse(token));
   }
 }

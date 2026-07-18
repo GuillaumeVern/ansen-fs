@@ -1,40 +1,57 @@
 package com.losvernos.anzenfs;
 
-import com.losvernos.anzenfs.database.DBInitializer;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.context.event.EventListener;
 
-import jakarta.servlet.MultipartConfigElement;
+import java.io.File;
+import java.io.IOException;
 
 @ImportRuntimeHints(AnzenfsApplication.WebResourcesHints.class)
 @SpringBootApplication
 public class AnzenfsApplication {
-  @Autowired
-  MultipartConfigElement multipartConfigElement;
+
+  private static final String APP_NAME = "anzenfs";
+  private static final String DB_NAME = "anzenfs.db";
+
+  static void main(String[] args) {
+    String dbPath = getDBFilePath();
+
+    System.setProperty("custom.db.path", dbPath);
+
+    SpringApplication.run(AnzenfsApplication.class, args);
+  }
+
+  private static String getDBFilePath() {
+    String xdgDataHome = System.getenv("XDG_DATA_HOME");
+    if (xdgDataHome == null || xdgDataHome.isEmpty()) {
+      xdgDataHome = System.getProperty("user.home") + File.separator + ".local" + File.separator + "share";
+    }
+
+    File appDataDir = new File(xdgDataHome, APP_NAME);
+    if (!appDataDir.exists()) {
+      appDataDir.mkdirs();
+    }
+    File dbFile = new File(appDataDir, DB_NAME);
+    if (!dbFile.exists()) {
+      try {
+        dbFile.createNewFile();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+    return dbFile.getAbsolutePath();
+  }
 
   static class WebResourcesHints implements RuntimeHintsRegistrar {
     @Override
     public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
-      // Force l'inclusion de tout le dossier static dans le binaire natif
       hints.resources().registerPattern("static/browser/**");
     }
-  }
-
-  @EventListener(ApplicationReadyEvent.class)
-  public void checkLimits() {
-    System.out.println("Max File Size: " + multipartConfigElement.getMaxFileSize());
-    System.out.println("Max Request Size: " + multipartConfigElement.getMaxRequestSize());
-    DBInitializer.initialize();
-  }
-
-  static void main(String[] args) {
-    SpringApplication.run(AnzenfsApplication.class, args);
   }
 
 }

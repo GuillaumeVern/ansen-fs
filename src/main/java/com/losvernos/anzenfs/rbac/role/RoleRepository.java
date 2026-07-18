@@ -1,93 +1,74 @@
 package com.losvernos.anzenfs.rbac.role;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Optional;
-
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import com.losvernos.anzenfs.database.DBManager;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 public class RoleRepository {
 
-  public List<Role> getAll() {
-    var conn = DBManager.getInstance().getConnection();
-    List<Role> rolesList = new ArrayList<Role>();
+    private final JdbcTemplate jdbcTemplate;
 
-    try {
-      var stmt = conn.prepareStatement("""
-            SELECT * FROM roles;
-          """);
-      var resultSet = stmt.executeQuery();
-      rolesList = mapResultSetToRoles(resultSet);
-    } catch (SQLException e) {
-      e.printStackTrace();
+    public RoleRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
-    return rolesList;
-  }
-
-  public Optional<Role> get(long ID) {
-    var conn = DBManager.getInstance().getConnection();
-    Optional<Role> result = Optional.empty();
-
-    try {
-      var stmt = conn.prepareStatement("""
-            SELECT * FROM roles WHERE roles.role_id = ?;
-          """);
-
-      stmt.setInt(1, (int) ID);
-      var resultSet = stmt.executeQuery();
-      var roleDTOList = mapResultSetToRoles(resultSet);
-      try {
-        result = Optional.of(roleDTOList.getFirst());
-      } catch (NoSuchElementException e) {
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
+    public List<Role> getAll() {
+        String sql = "SELECT * FROM roles;";
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Role role = new Role();
+            role.setID(rs.getLong("role_id"));
+            role.setName(rs.getString("role_name"));
+            return role;
+        });
     }
 
-    return result;
-  }
-
-  public void save(Role elementToSave) {
-    var conn = DBManager.getInstance().getConnection();
-
-    try {
-      var stmt = conn.prepareStatement("""
-          INSERT INTO roles (role_name)
-          VALUES (?);""");
-
-      stmt.setString(1, elementToSave.getName());
-
-      stmt.execute();
-    } catch (SQLException e) {
-      e.printStackTrace();
-    }
-  }
-
-  public void update(Role elementToUpdate, String[] params) {
-    System.out.println("update role not implemented");
-  }
-
-  public void delete(Role elementToDelete) {
-    System.out.println("delete role not implemented");
-  }
-
-  private List<Role> mapResultSetToRoles(ResultSet resultSet) throws SQLException {
-    var userDTOList = new ArrayList<Role>();
-
-    while (resultSet.next()) {
-      var roleDTO = new Role();
-      roleDTO.setID(resultSet.getLong("role_id"));
-      roleDTO.setName(resultSet.getString("role_name"));
-      userDTOList.add(roleDTO);
+    public Optional<Role> get(long ID) {
+        String sql = "SELECT * FROM roles WHERE role_id = ?;";
+        try {
+            Role role = jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
+                Role r = new Role();
+                r.setID(rs.getLong("role_id"));
+                r.setName(rs.getString("role_name"));
+                return r;
+            }, ID);
+            return Optional.ofNullable(role);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
     }
 
-    return userDTOList;
-  }
+    public void save(Role elementToSave) {
+        String sql = "INSERT INTO roles (role_name) VALUES (?);";
+        jdbcTemplate.update(sql, elementToSave.getName());
+    }
+
+    public void update(Role elementToUpdate, String[] params) {
+        System.out.println("update role not implemented");
+    }
+
+    public void delete(Role elementToDelete) {
+        System.out.println("delete role not implemented");
+    }
+
+    public Optional<Role> findByName(String name) {
+        String sql = "SELECT role_id, role_name FROM roles WHERE role_name = ?;";
+
+        try {
+            Role role = jdbcTemplate.queryForObject(sql, (rs, rowNum) ->
+                            new Role(
+                                    rs.getLong("role_id"),
+                                    rs.getString("role_name"),
+                                    null
+                            ),
+                    name
+            );
+            return Optional.ofNullable(role);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
 }

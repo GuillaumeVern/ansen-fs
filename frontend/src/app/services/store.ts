@@ -18,7 +18,7 @@ export class StoreService {
   private nodes = signal<FileNode[]>([]);
   private arianeHistory = signal<string[]>(["Root"]);
   public ariane = this.arianeHistory.asReadonly();
-  private uuidHistory = signal<string[]>(['']);
+  private uuidHistory = signal<string[]>(['root-uuid']);
 
   public fileNodes = this.nodes.asReadonly();
   public isLoading = signal(false);

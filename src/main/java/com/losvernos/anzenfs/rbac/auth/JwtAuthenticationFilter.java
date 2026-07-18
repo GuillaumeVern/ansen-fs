@@ -16,9 +16,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtils jwtUtils;
-  
-    public JwtAuthenticationFilter() {
-        this.jwtUtils = new JwtUtils();
+
+    public JwtAuthenticationFilter(JwtUtils jwtUtils) {
+        this.jwtUtils = jwtUtils;
     }
 
     @Override

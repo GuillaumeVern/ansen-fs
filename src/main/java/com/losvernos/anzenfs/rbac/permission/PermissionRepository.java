@@ -1,73 +1,49 @@
 package com.losvernos.anzenfs.rbac.permission;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Optional;
-
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import com.losvernos.anzenfs.database.DBManager;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 public class PermissionRepository {
 
+  private final JdbcTemplate jdbcTemplate;
+
+  public PermissionRepository(JdbcTemplate jdbcTemplate) {
+    this.jdbcTemplate = jdbcTemplate;
+  }
+
   public List<Permission> getAll() {
-    var conn = DBManager.getInstance().getConnection();
-    List<Permission> permissionsList = new ArrayList<Permission>();
-
-    try {
-      var stmt = conn.prepareStatement("""
-            SELECT * FROM permissions;
-          """);
-      var resultSet = stmt.executeQuery();
-      permissionsList = mapResultSetToPermissions(resultSet);
-    } catch (SQLException e) {
-      e.printStackTrace();
-    }
-
-    return permissionsList;
+    String sql = "SELECT * FROM permissions;";
+    return jdbcTemplate.query(sql, (rs, rowNum) -> {
+      Permission permission = new Permission();
+      permission.setID(rs.getLong("permission_id"));
+      permission.setName(rs.getString("permission_name"));
+      return permission;
+    });
   }
 
   public Optional<Permission> get(long ID) {
-    var conn = DBManager.getInstance().getConnection();
-    Optional<Permission> result = Optional.empty();
-
+    String sql = "SELECT * FROM permissions WHERE permission_id = ?;";
     try {
-      var stmt = conn.prepareStatement("""
-            SELECT * FROM permissions WHERE permissions.permission_id = ?;
-          """);
-
-      stmt.setInt(1, (int) ID);
-      var resultSet = stmt.executeQuery();
-      var permissionList = mapResultSetToPermissions(resultSet);
-      try {
-        result = Optional.of(permissionList.getFirst());
-      } catch (NoSuchElementException e) {
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
+      Permission permission = jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
+        Permission p = new Permission();
+        p.setID(rs.getLong("permission_id"));
+        p.setName(rs.getString("permission_name"));
+        return p;
+      }, ID);
+      return Optional.ofNullable(permission);
+    } catch (EmptyResultDataAccessException e) {
+      return Optional.empty();
     }
-
-    return result;
   }
 
   public void save(Permission elementToSave) {
-    var conn = DBManager.getInstance().getConnection();
-
-    try {
-      var stmt = conn.prepareStatement("""
-          INSERT INTO permissions (permission_name)
-          VALUES (?);""");
-
-      stmt.setString(1, elementToSave.getName());
-
-      stmt.execute();
-    } catch (SQLException e) {
-      e.printStackTrace();
-    }
+    String sql = "INSERT INTO permissions (permission_name) VALUES (?);";
+    jdbcTemplate.update(sql, elementToSave.getName());
   }
 
   public void update(Permission elementToUpdate, String[] params) {
@@ -76,18 +52,5 @@ public class PermissionRepository {
 
   public void delete(Permission elementToDelete) {
     System.out.println("delete permission not implemented");
-  }
-
-  private List<Permission> mapResultSetToPermissions(ResultSet resultSet) throws SQLException {
-    var userDTOList = new ArrayList<Permission>();
-
-    while (resultSet.next()) {
-      var permission = new Permission();
-      permission.setID(resultSet.getLong("permission_id"));
-      permission.setName(resultSet.getString("permission_name"));
-      userDTOList.add(permission);
-    }
-
-    return userDTOList;
   }
 }

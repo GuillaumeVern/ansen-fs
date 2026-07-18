@@ -1,241 +1,201 @@
 package com.losvernos.anzenfs.files;
 
-import java.sql.SQLException;
+import com.losvernos.anzenfs.rbac.role.Role;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
-import org.springframework.stereotype.Service;
-
-import com.losvernos.anzenfs.database.DBManager;
+import java.util.UUID;
 
 @Service
 public class FileRepository {
 
-  public Optional<Integer> findIdByNameAndParent(String name, Integer parentId) {
-    var sql = "SELECT file_id FROM files WHERE name = ? AND " +
-        (parentId == null ? "parent_id IS NULL" : "parent_id = ?");
-    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql)) {
-      stmt.setString(1, name);
-      if (parentId != null)
-        stmt.setInt(2, parentId);
-      try (var resultSet = stmt.executeQuery()) {
-        if (resultSet.next()) {
-          return Optional.of(resultSet.getInt("file_id"));
+    private final JdbcTemplate jdbcTemplate;
+
+    public FileRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public Optional<Integer> findIdByNameAndParent(String name, Integer parentId) {
+        String sql = "SELECT file_id FROM files WHERE name = ? AND " +
+                (parentId == null ? "parent_id IS NULL" : "parent_id = ?");
+
+        try {
+            Integer id = parentId == null
+                    ? jdbcTemplate.queryForObject(sql, Integer.class, name)
+                    : jdbcTemplate.queryForObject(sql, Integer.class, name, parentId);
+            return Optional.ofNullable(id);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
         }
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
     }
-    return Optional.empty();
-  }
 
-  public Optional<Integer> findIdByUuid(String uuid) {
-    if (uuid == null)
-      return Optional.empty();
-    var sql = "SELECT file_id FROM files WHERE external_id = ?;";
-    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql)) {
-      stmt.setString(1, uuid);
-      try (var rs = stmt.executeQuery()) {
-        if (rs.next())
-          return Optional.of(rs.getInt("file_id"));
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
-    }
-    return Optional.empty();
-  }
-
-  public List<FileNode> getChildrenAfter(Integer parentId, String lastFileName, String parentUuid, int limit) {
-    var result = new ArrayList<FileNode>();
-
-    var sql = """
-        SELECT * FROM files
-        WHERE (? IS NULL AND parent_id IS NULL) OR (parent_id = ?)
-        AND (? IS NULL OR name > ?)
-        ORDER BY name
-        LIMIT ?;
-        """;
-    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql)) {
-      if (parentId == null) {
-        stmt.setNull(1, java.sql.Types.INTEGER);
-        stmt.setNull(2, java.sql.Types.INTEGER);
-      } else {
-        stmt.setInt(1, parentId);
-        stmt.setInt(2, parentId);
-      }
-
-      if (lastFileName == null) {
-        stmt.setNull(3, java.sql.Types.VARCHAR);
-        stmt.setNull(4, java.sql.Types.VARCHAR);
-      } else {
-        stmt.setString(3, lastFileName);
-        stmt.setString(4, lastFileName);
-      }
-      stmt.setInt(5, limit);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          result.add(new FileNode(
-              rs.getString("external_id"),
-              parentUuid,
-              rs.getString("name"),
-              rs.getString("type"),
-              rs.getString("file_hash"),
-              0L));
+    public Optional<Integer> findIdByUuid(String uuid) {
+        if (uuid == null) {
+            return Optional.empty();
         }
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
-    }
-
-    return result;
-  }
-
-  public void insertFile(Integer parentId, String name, String type, String hash) {
-    String sql = "INSERT INTO files (parent_id, name, type, file_hash, external_id) VALUES (?, ?, ?, ?, ?);";
-
-    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql)) {
-      String externalId = java.util.UUID.randomUUID().toString();
-
-      if (parentId == null)
-        stmt.setNull(1, java.sql.Types.INTEGER);
-      else
-        stmt.setInt(1, parentId);
-
-      stmt.setString(2, name);
-      stmt.setString(3, type);
-      stmt.setString(4, hash);
-      stmt.setString(5, externalId);
-      stmt.executeUpdate();
-    } catch (SQLException e) {
-      e.printStackTrace();
-    }
-  }
-
-  public Integer createFolder(Integer parentId, String name) {
-    String sql = "INSERT INTO files (parent_id, name, type, external_id) VALUES (?, ?, 'FOLDER', ?)";
-
-    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
-      String externalId = java.util.UUID.randomUUID().toString();
-
-      if (parentId == null) {
-        stmt.setNull(1, java.sql.Types.INTEGER);
-      } else {
-        stmt.setInt(1, parentId);
-      }
-
-      stmt.setString(2, name);
-      stmt.setString(3, externalId);
-      stmt.executeUpdate();
-
-      try (var rs = stmt.getGeneratedKeys()) {
-        if (rs.next())
-          return rs.getInt(1);
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
-    }
-    return null;
-  }
-
-  public String getFullPath(String externalId) {
-    var maxDepth = 10000;
-    String resultPath = null;
-
-    String sql = """
-            WITH RECURSIVE path_builder(level, name, parent_id) AS (
-              SELECT 0, name, parent_id
-              FROM files
-              WHERE external_id = ?
-              UNION ALL
-              SELECT pb.level + 1, f.name, f.parent_id
-              FROM files f
-              JOIN path_builder pb ON f.file_id = pb.parent_id
-              WHERE pb.level < ?
-            )
-            SELECT name FROM path_builder ORDER BY level DESC;
-            """;
-
-    try (var stmt = DBManager.getInstance().getConnection().prepareStatement(sql)) {
-      stmt.setString(1, externalId);
-      stmt.setInt(2, maxDepth);
-      try (var rs = stmt.executeQuery()) {
-        List<String> pathParts = new ArrayList<>();
-        while (rs.next()) {
-          pathParts.add(rs.getString("name"));
+        String sql = "SELECT file_id FROM files WHERE external_id = ?;";
+        try {
+            Integer id = jdbcTemplate.queryForObject(sql, Integer.class, uuid);
+            return Optional.ofNullable(id);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
         }
-        resultPath = String.join("/", pathParts);
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
     }
 
-    return resultPath;
-  }
+    public List<FileNode> getChildrenAfter(Integer parentId, String lastFileName, String parentUuid, int limit, List<Role> roles) {
+        List<FileNode> result = new ArrayList<>();
+        boolean isAdmin = roles.stream().anyMatch(r -> r.getName().equalsIgnoreCase("ADMIN"));
 
-  public List<String[]> deleteItemAndGetDescendantPaths(String externalId) {
-    List<String[]> deletedMetadata = new ArrayList<>();
+        if (!isAdmin && roles.isEmpty()) {
+            return result;
+        }
 
-    String selectSql = """
-        WITH RECURSIVE item_tree(file_id, external_id, name, type, parent_id) AS (
-          SELECT file_id, external_id, name, type, parent_id
-          FROM files
-          WHERE external_id = ?
-          UNION ALL
-          SELECT f.file_id, f.external_id, f.name, f.type, f.parent_id
-          FROM files f
-          JOIN item_tree it ON f.parent_id = it.file_id
-        )
-        SELECT external_id, name, type FROM item_tree;
-        """;
+        StringBuilder sql = new StringBuilder("SELECT f.* FROM files f ");
+        if (!isAdmin) {
+            sql.append(" JOIN file_roles fr ON f.file_id = fr.file_id ");
+        }
 
-    String deleteSql = """
-        WITH RECURSIVE item_tree(file_id) AS (
-          SELECT file_id FROM files WHERE external_id = ?
-          UNION ALL
-          SELECT f.file_id FROM files f
-          JOIN item_tree it ON f.parent_id = it.file_id
-        )
-        DELETE FROM files WHERE file_id IN (SELECT file_id FROM item_tree);
-        """;
+        sql.append(" WHERE ((? IS NULL AND f.parent_id IS NULL) OR (f.parent_id = ?)) ")
+                .append(" AND (? IS NULL OR f.name > ?) ");
 
-    try {
-      var connection = DBManager.getInstance().getConnection();
-      connection.setAutoCommit(false);
-
-      try {
-        try (var selectStmt = connection.prepareStatement(selectSql)) {
-          selectStmt.setString(1, externalId);
-          try (var rs = selectStmt.executeQuery()) {
-            while (rs.next()) {
-              deletedMetadata.add(new String[]{
-                      rs.getString("external_id"),
-                      rs.getString("name"),
-                      rs.getString("type")
-              });
+        if (!isAdmin) {
+            sql.append(" AND fr.role_id IN (");
+            for (int i = 0; i < roles.size(); i++) {
+                sql.append(i == 0 ? "?" : ", ?");
             }
-          }
+            sql.append(") ");
         }
+
+        sql.append(" ORDER BY f.name LIMIT ?; ");
+
+        List<Object> args = new ArrayList<>();
+        args.add(parentId);
+        args.add(parentId);
+        args.add(lastFileName);
+        args.add(lastFileName);
+
+        if (!isAdmin) {
+            for (Role role : roles) {
+                args.add(role.getID());
+            }
+        }
+        args.add(limit);
+
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new FileNode(
+                rs.getString("external_id"),
+                parentUuid,
+                rs.getString("name"),
+                rs.getString("type"),
+                rs.getString("file_hash"),
+                0L
+        ), args.toArray());
+    }
+
+    public void insertFile(Integer parentId, String name, String type, String hash) {
+        String sql = "INSERT INTO files (parent_id, name, type, file_hash, external_id) VALUES (?, ?, ?, ?, ?);";
+        String externalId = UUID.randomUUID().toString();
+        jdbcTemplate.update(sql, parentId, name, type, hash, externalId);
+    }
+
+    public Integer createFolder(Integer parentId, String name) {
+        return this.createFolder(parentId, name, null);
+    }
+
+    public Integer createFolder(Integer parentId, String name, String externalId) {
+        String sql = "INSERT INTO files (parent_id, name, type, external_id) VALUES (?, ?, 'FOLDER', ?)";
+        if (null == externalId) {
+            externalId = UUID.randomUUID().toString();
+        }
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        String finalExternalId = externalId;
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setObject(1, parentId); // setObject handles null conversions naturally
+            ps.setString(2, name);
+            ps.setString(3, finalExternalId);
+            return ps;
+        }, keyHolder);
+
+        Number key = keyHolder.getKey();
+        return key != null ? key.intValue() : null;
+    }
+
+    public String getFullPath(String externalId) {
+        int maxDepth = 10000;
+        String sql = """
+                WITH RECURSIVE path_builder(level, name, parent_id) AS (
+                  SELECT 0, name, parent_id
+                  FROM files
+                  WHERE external_id = ?
+                  UNION ALL
+                  SELECT pb.level + 1, f.name, f.parent_id
+                  FROM files f
+                  JOIN path_builder pb ON f.file_id = pb.parent_id
+                  WHERE pb.level < ?
+                )
+                SELECT name FROM path_builder ORDER BY level DESC;
+                """;
+
+        List<String> pathParts = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("name"), externalId, maxDepth);
+        return pathParts.isEmpty() ? null : String.join("/", pathParts);
+    }
+
+    @Transactional
+    public List<String[]> deleteItemAndGetDescendantPaths(String externalId) {
+        String selectSql = """
+                WITH RECURSIVE item_tree(file_id, external_id, name, type, parent_id) AS (
+                  SELECT file_id, external_id, name, type, parent_id
+                  FROM files
+                  WHERE external_id = ?
+                  UNION ALL
+                  SELECT f.file_id, f.external_id, f.name, f.type, f.parent_id
+                  FROM files f
+                  JOIN item_tree it ON f.parent_id = it.file_id
+                )
+                SELECT external_id, name, type FROM item_tree;
+                """;
+
+        String deleteSql = """
+                WITH RECURSIVE item_tree(file_id) AS (
+                  SELECT file_id FROM files WHERE external_id = ?
+                  UNION ALL
+                  SELECT f.file_id FROM files f
+                  JOIN item_tree it ON f.parent_id = it.file_id
+                )
+                DELETE FROM files WHERE file_id IN (SELECT file_id FROM item_tree);
+                """;
+
+        List<String[]> deletedMetadata = jdbcTemplate.query(selectSql, (rs, rowNum) -> new String[]{
+                rs.getString("external_id"),
+                rs.getString("name"),
+                rs.getString("type")
+        }, externalId);
 
         if (!deletedMetadata.isEmpty()) {
-          try (var deleteStmt = connection.prepareStatement(deleteSql)) {
-            deleteStmt.setString(1, externalId);
-            deleteStmt.executeUpdate();
-          }
+            jdbcTemplate.update(deleteSql, externalId);
         }
 
-        connection.commit();
-      } catch (SQLException ex) {
-        connection.rollback();
-        throw ex;
-      } finally {
-        connection.setAutoCommit(true);
-      }
-
-    } catch (SQLException e) {
-      e.printStackTrace();
+        return deletedMetadata;
     }
 
-    return deletedMetadata;
-  }
+    public void linkFileToRole(long fileId, long roleId, String permissionLevel) {
+        String sql = """
+        INSERT INTO file_roles (file_id, role_id, permission_level)
+        VALUES (?, ?, ?)
+        ON CONFLICT (file_id, role_id) 
+        DO UPDATE SET permission_level = EXCLUDED.permission_level;
+    """;
+
+        jdbcTemplate.update(sql, fileId, roleId, permissionLevel.toUpperCase());
+    }
 }

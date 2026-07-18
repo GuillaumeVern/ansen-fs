@@ -26,6 +26,9 @@ public class SecurityConfig {
   @Autowired
   private PasswordEncoder passwordEncoder;
 
+  @Autowired
+  private JwtAuthenticationFilter jwtAuthenticationFilter;
+
   @Bean
   public AuthenticationProvider authenticationProvider() {
     DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userService);
@@ -34,13 +37,7 @@ public class SecurityConfig {
   }
 
   @Bean
-  public AuthenticationManager authenticationManager(AuthenticationConfiguration config) {
-    return config.getAuthenticationManager();
-  }
-
-  @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) {
-    JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter();
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

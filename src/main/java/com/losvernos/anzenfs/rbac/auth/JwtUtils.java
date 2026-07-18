@@ -4,6 +4,7 @@ import java.security.Key;
 import java.util.Date;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import io.jsonwebtoken.Claims;
@@ -14,8 +15,11 @@ import io.jsonwebtoken.security.Keys;
 
 @Component
 public class JwtUtils {
-  private final String SECRET = "Really long secret string that is really really long";
-  private final Key signingKey = Keys.hmacShaKeyFor(SECRET.getBytes());
+  private final Key signingKey;
+
+  public JwtUtils(@Value("${app.jwt.secret}") String secret) {
+    this.signingKey = Keys.hmacShaKeyFor(secret.getBytes());
+  }
 
   public String generateToken(String username, List<String> roles) {
     return Jwts.builder()
