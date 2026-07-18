@@ -50,6 +50,67 @@ public class UserRepository {
         return jdbcTemplate.query(sql, userRowMapper);
     }
 
+    public List<User> getAllWithRoles() {
+        String sql = """
+                SELECT
+                  u.user_id, u.username, u.password,
+                  r.role_id, r.role_name
+                FROM users u
+                LEFT JOIN user_roles ur ON ur.user_id = u.user_id
+                LEFT JOIN roles r ON r.role_id = ur.role_id
+                ORDER BY u.user_id;
+                """;
+
+        Map<Long, User> usersById = new LinkedHashMap<>();
+
+        jdbcTemplate.query(sql, rs -> {
+            long userId = rs.getLong("user_id");
+            User user = usersById.computeIfAbsent(userId, id -> {
+                User u = new User();
+                try {
+                    u.setID(id);
+                    u.setUsername(rs.getString("username"));
+                    u.setPassword(rs.getString("password"));
+                    u.setUserRoles(new ArrayList<>());
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+                return u;
+            });
+
+            long roleId = rs.getLong("role_id");
+            if (!rs.wasNull()) {
+                Role role = new Role();
+                role.setID(roleId);
+                role.setName(rs.getString("role_name"));
+                role.setPermissions(new ArrayList<>());
+                user.getUserRoles().add(role);
+            }
+        });
+
+        return new ArrayList<>(usersById.values());
+    }
+
+    @Transactional
+    public void replaceUserRoles(long userId, List<Long> roleIds) {
+        jdbcTemplate.update("DELETE FROM user_roles WHERE user_id = ?", userId);
+        for (Long roleId : roleIds) {
+            jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, roleId);
+        }
+    }
+
+    @Transactional
+    public void deleteById(long userId) {
+        // SQLite foreign-key enforcement isn't enabled on this connection, so ON DELETE
+        // CASCADE in schema.sql doesn't actually run - clean up dependents explicitly.
+        jdbcTemplate.update("DELETE FROM user_roles WHERE user_id = ?", userId);
+        jdbcTemplate.update("DELETE FROM users WHERE user_id = ?", userId);
+    }
+
+    public void updatePassword(long userId, String encodedPassword) {
+        jdbcTemplate.update("UPDATE users SET password = ? WHERE user_id = ?", encodedPassword, userId);
+    }
+
     public Optional<User> get(long ID) {
         String sql = "SELECT * FROM users WHERE user_id = ?;";
         try {

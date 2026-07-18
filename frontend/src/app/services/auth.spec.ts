@@ -5,8 +5,21 @@ import { vi } from 'vitest';
 
 import { AuthService } from './auth';
 import { StoreService } from './store';
+import { UserSummary } from '../models/rbac';
 
 const TOKEN_STORAGE_KEY = 'anzenfs.token';
+
+const adminSummary: UserSummary = {
+  id: 1,
+  username: 'admin',
+  roles: [{ id: 1, name: 'ADMIN', permissions: [] }],
+};
+
+const plainUserSummary: UserSummary = {
+  id: 2,
+  username: 'alice',
+  roles: [{ id: 2, name: 'USER_ROLE', permissions: [] }],
+};
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -31,9 +44,11 @@ describe('AuthService', () => {
   it('starts unauthenticated when no token is stored', () => {
     expect(service.isAuthenticated()).toBe(false);
     expect(service.token()).toBeNull();
+    expect(service.currentUser()).toBeNull();
+    expect(service.isAdmin()).toBe(false);
   });
 
-  it('picks up a pre-existing token from localStorage on construction', () => {
+  it('picks up a pre-existing token from localStorage and loads the current user', async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, 'preexisting-token');
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -41,10 +56,17 @@ describe('AuthService', () => {
     });
 
     const fresh = TestBed.inject(AuthService);
+    const freshHttpMock = TestBed.inject(HttpTestingController);
     expect(fresh.token()).toBe('preexisting-token');
+
+    freshHttpMock.expectOne('/api/auth/me').flush(plainUserSummary);
+    await Promise.resolve();
+
+    expect(fresh.currentUser()).toEqual(plainUserSummary);
+    freshHttpMock.verify();
   });
 
-  it('login stores the token and flips isAuthenticated', async () => {
+  it('login stores the token, loads the current user, and flips isAuthenticated', async () => {
     const resetSpy = vi.spyOn(storeService, 'reset');
     const loginPromise = service.login('alice', 'secret');
 
@@ -53,12 +75,17 @@ describe('AuthService', () => {
     expect(req.request.body).toEqual({ username: 'alice', password: 'secret' });
     req.flush({ token: 'new-token' });
 
+    await Promise.resolve();
+    httpMock.expectOne('/api/auth/me').flush(adminSummary);
+
     await loginPromise;
 
     expect(service.token()).toBe('new-token');
     expect(service.isAuthenticated()).toBe(true);
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('new-token');
     expect(resetSpy).toHaveBeenCalled();
+    expect(service.currentUser()).toEqual(adminSummary);
+    expect(service.isAdmin()).toBe(true);
   });
 
   it('login rejects and leaves state untouched when the server rejects credentials', async () => {
@@ -70,11 +97,14 @@ describe('AuthService', () => {
     await expect(loginPromise).rejects.toBeTruthy();
     expect(service.isAuthenticated()).toBe(false);
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+    expect(service.currentUser()).toBeNull();
   });
 
-  it('logout clears the token and resets store state', async () => {
+  it('logout clears the token, current user, and resets store state', async () => {
     const loginPromise = service.login('alice', 'secret');
     httpMock.expectOne('/api/auth/login').flush({ token: 'tok' });
+    await Promise.resolve();
+    httpMock.expectOne('/api/auth/me').flush(plainUserSummary);
     await loginPromise;
 
     const resetSpy = vi.spyOn(storeService, 'reset');
@@ -82,7 +112,28 @@ describe('AuthService', () => {
 
     expect(service.isAuthenticated()).toBe(false);
     expect(service.token()).toBeNull();
+    expect(service.currentUser()).toBeNull();
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
     expect(resetSpy).toHaveBeenCalled();
+  });
+
+  describe('loadCurrentUser', () => {
+    it('sets currentUser on success', async () => {
+      const promise = service.loadCurrentUser();
+      httpMock.expectOne('/api/auth/me').flush(adminSummary);
+      await promise;
+
+      expect(service.currentUser()).toEqual(adminSummary);
+      expect(service.isAdmin()).toBe(true);
+    });
+
+    it('clears currentUser when the request fails', async () => {
+      const promise = service.loadCurrentUser();
+      httpMock.expectOne('/api/auth/me').flush('boom', { status: 500, statusText: 'Server Error' });
+      await promise;
+
+      expect(service.currentUser()).toBeNull();
+      expect(service.isAdmin()).toBe(false);
+    });
   });
 });
