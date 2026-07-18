@@ -33,6 +33,7 @@ public class FileController {
   private final Path stagingDir = new File(FileUtils.getDataDir(), "staging").toPath();
 
   @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @PreAuthorize("@fsSecurity.hasAccess(#parentUuid != null ? #parentUuid : 'root-uuid', 'WRITE')")
   public ResponseEntity<UploadJobSummary> upload(
       @RequestParam(required = false) String parentUuid,
       @RequestPart("files") MultipartFile[] files) throws IOException {
@@ -63,6 +64,11 @@ public class FileController {
         "PROCESSING");
 
     return ResponseEntity.status(HttpStatus.ACCEPTED).body(summary);
+  }
+
+  @GetMapping("/home")
+  public ResponseEntity<FileNode> getHomeFolder(@AuthenticationPrincipal User currentUser) {
+    return ResponseEntity.ok(fileService.getHomeFolder(currentUser));
   }
 
   @GetMapping("")

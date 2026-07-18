@@ -3,19 +3,16 @@
   <header class="action-toolbar">
     <div class="toolbar-left">
       <nz-breadcrumb>
-        <nz-breadcrumb-item (click)="navigateToIndex(0)" class="clickable-crumb">
-          <nz-icon nzType="home" nzTheme="outline" /> Root
-        </nz-breadcrumb-item>
-
         @for (folderName of arianeHistory(); let i = $index; let isLast = $last; track i) {
-          @if (i > 0) {
-            <nz-breadcrumb-item
-              [class.active-crumb]="isLast"
-              [class.clickable-crumb]="!isLast"
-              (click)="!isLast ? navigateToIndex(i) : null">
-              {{ folderName }}
-            </nz-breadcrumb-item>
-          }
+          <nz-breadcrumb-item
+            [class.active-crumb]="isLast"
+            [class.clickable-crumb]="!isLast"
+            (click)="!isLast ? navigateToIndex(i) : null">
+            @if (i === 0) {
+              <nz-icon nzType="home" nzTheme="outline" />
+            }
+            {{ folderName }}
+          </nz-breadcrumb-item>
         }
       </nz-breadcrumb>
     </div>

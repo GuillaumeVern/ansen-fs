@@ -83,7 +83,8 @@ export class Store implements OnInit {
     });
   }
 
-  ngOnInit() {
+  async ngOnInit() {
+    await this.storeService.initHome();
     this.storeService.loadFiles(true);
   }
 

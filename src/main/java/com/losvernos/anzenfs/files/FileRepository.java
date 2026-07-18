@@ -38,6 +38,25 @@ public class FileRepository {
         }
     }
 
+    public Optional<FileNode> findByNameAndParent(String name, Integer parentId) {
+        String sql = "SELECT external_id, name, type, file_hash FROM files WHERE name = ? AND " +
+                (parentId == null ? "parent_id IS NULL" : "parent_id = ?");
+
+        try {
+            FileNode node = jdbcTemplate.queryForObject(sql, (rs, rowNum) -> new FileNode(
+                    rs.getString("external_id"),
+                    null,
+                    rs.getString("name"),
+                    rs.getString("type"),
+                    rs.getString("file_hash"),
+                    0L
+            ), parentId == null ? new Object[]{name} : new Object[]{name, parentId});
+            return Optional.ofNullable(node);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+
     public Optional<Integer> findIdByUuid(String uuid) {
         if (uuid == null) {
             return Optional.empty();
@@ -52,52 +71,25 @@ public class FileRepository {
     }
 
     public List<FileNode> getChildrenAfter(Integer parentId, String lastFileName, String parentUuid, int limit, List<Role> roles) {
-        List<FileNode> result = new ArrayList<>();
-        boolean isAdmin = roles.stream().anyMatch(r -> r.getName().equalsIgnoreCase("ADMIN"));
-
-        if (!isAdmin && roles.isEmpty()) {
-            return result;
+        if (roles.isEmpty()) {
+            return new ArrayList<>();
         }
 
-        StringBuilder sql = new StringBuilder("SELECT f.* FROM files f ");
-        if (!isAdmin) {
-            sql.append(" JOIN file_roles fr ON f.file_id = fr.file_id ");
-        }
+        String sql = """
+                SELECT f.* FROM files f
+                WHERE ((? IS NULL AND f.parent_id IS NULL) OR (f.parent_id = ?))
+                  AND (? IS NULL OR f.name > ?)
+                ORDER BY f.name LIMIT ?;
+                """;
 
-        sql.append(" WHERE ((? IS NULL AND f.parent_id IS NULL) OR (f.parent_id = ?)) ")
-                .append(" AND (? IS NULL OR f.name > ?) ");
-
-        if (!isAdmin) {
-            sql.append(" AND fr.role_id IN (");
-            for (int i = 0; i < roles.size(); i++) {
-                sql.append(i == 0 ? "?" : ", ?");
-            }
-            sql.append(") ");
-        }
-
-        sql.append(" ORDER BY f.name LIMIT ?; ");
-
-        List<Object> args = new ArrayList<>();
-        args.add(parentId);
-        args.add(parentId);
-        args.add(lastFileName);
-        args.add(lastFileName);
-
-        if (!isAdmin) {
-            for (Role role : roles) {
-                args.add(role.getID());
-            }
-        }
-        args.add(limit);
-
-        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new FileNode(
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new FileNode(
                 rs.getString("external_id"),
                 parentUuid,
                 rs.getString("name"),
                 rs.getString("type"),
                 rs.getString("file_hash"),
                 0L
-        ), args.toArray());
+        ), parentId, parentId, lastFileName, lastFileName, limit);
     }
 
     public void insertFile(Integer parentId, String name, String type, String hash) {
@@ -197,5 +189,10 @@ public class FileRepository {
     """;
 
         jdbcTemplate.update(sql, fileId, roleId, permissionLevel.toUpperCase());
+    }
+
+    public void unlinkFileFromRole(long fileId, long roleId) {
+        String sql = "DELETE FROM file_roles WHERE file_id = ? AND role_id = ?;";
+        jdbcTemplate.update(sql, fileId, roleId);
     }
 }

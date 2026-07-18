@@ -4,6 +4,7 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,6 +25,7 @@ public class JobController {
   private JobService jobService;
 
   @PostMapping("/new")
+  @PreAuthorize("@fsSecurity.hasAccess(#request.parentUuid() != null ? #request.parentUuid() : 'root-uuid', 'WRITE')")
   public ResponseEntity<?> createJob(@RequestBody UploadJobCreationRequest request) {
 
     var jobId = jobService.createUploadJob(request.parentUuid(), request.manifest());
@@ -31,6 +33,7 @@ public class JobController {
   }
 
   @PostMapping("/{jobId}/upload")
+  @PreAuthorize("@fsSecurity.hasAccess(#parentUuid != null ? #parentUuid : 'root-uuid', 'WRITE')")
   public ResponseEntity<?> uploadFile(
       @PathVariable String jobId,
       @RequestParam("files") MultipartFile[] files,

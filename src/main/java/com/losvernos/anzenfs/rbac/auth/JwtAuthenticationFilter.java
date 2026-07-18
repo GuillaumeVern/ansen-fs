@@ -1,14 +1,13 @@
 package com.losvernos.anzenfs.rbac.auth;
 
 import java.io.IOException;
-import java.util.List;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -16,9 +15,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtils jwtUtils;
+    private final UserDetailsService userDetailsService;
 
-    public JwtAuthenticationFilter(JwtUtils jwtUtils) {
+    public JwtAuthenticationFilter(JwtUtils jwtUtils, UserDetailsService userDetailsService) {
         this.jwtUtils = jwtUtils;
+        this.userDetailsService = userDetailsService;
     }
 
     @Override
@@ -33,12 +34,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       if (jwtUtils.isTokenValid(token)) {
         String username = jwtUtils.extractUsername(token);
 
-        List<SimpleGrantedAuthority> authorities = jwtUtils.extractRoles(token).stream()
-            .map(SimpleGrantedAuthority::new)
-            .toList();
+        var user = userDetailsService.loadUserByUsername(username);
 
         UsernamePasswordAuthenticationToken auth =
-            new UsernamePasswordAuthenticationToken(username, null, authorities);
+            new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
 
         SecurityContextHolder.getContext().setAuthentication(auth);
       }

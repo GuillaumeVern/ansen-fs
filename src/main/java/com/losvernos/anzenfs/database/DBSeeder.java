@@ -7,8 +7,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.UUID;
-
 @Component
 public class DBSeeder implements CommandLineRunner {
 
@@ -38,13 +36,15 @@ public class DBSeeder implements CommandLineRunner {
         long rootId = fileRepository.findIdByNameAndParent("root", null)
                 .orElseThrow(() -> new IllegalStateException("System root creation validation failure"));
 
-        Role globalUserRole = roleRepository.findByName("USER_ROLE")
-                .orElseThrow(() -> new IllegalStateException("Global USER_ROLE validation failure"));
-
         Role adminRole = roleRepository.findByName("ADMIN")
                 .orElseThrow(() -> new IllegalStateException("ADMIN role validation failure"));
 
         fileRepository.linkFileToRole(rootId, adminRole.getID(), "WRITE");
-        fileRepository.linkFileToRole(rootId, globalUserRole.getID(), "READ");
+
+        // Root used to be granted READ to every USER_ROLE holder, which let any user browse
+        // into any other user's folder. Revoke it here so upgrading an existing database
+        // also drops the stale grant, not just fresh installs.
+        roleRepository.findByName("USER_ROLE")
+                .ifPresent(userRole -> fileRepository.unlinkFileFromRole(rootId, userRole.getID()));
     }
 }

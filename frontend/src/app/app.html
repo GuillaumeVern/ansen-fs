@@ -28,6 +28,9 @@
         <span class="header-trigger" (click)="isCollapsed = !isCollapsed">
           <nz-icon class="trigger" [nzType]="isCollapsed ? 'menu-unfold' : 'menu-fold'" />
         </span>
+        @if (isAuthenticated()) {
+          <button nz-button nzType="text" (click)="logout()">Log out</button>
+        }
       </div>
     </nz-header>
     <nz-content>

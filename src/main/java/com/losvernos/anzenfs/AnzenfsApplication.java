@@ -4,9 +4,7 @@ import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.ImportRuntimeHints;
-import org.springframework.context.event.EventListener;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,11 +16,11 @@ public class AnzenfsApplication {
   private static final String APP_NAME = "anzenfs";
   private static final String DB_NAME = "anzenfs.db";
 
-  static void main(String[] args) {
-    String dbPath = getDBFilePath();
+  static {
+    System.setProperty("custom.db.path", getDBFilePath());
+  }
 
-    System.setProperty("custom.db.path", dbPath);
-
+  public static void main(String[] args) {
     SpringApplication.run(AnzenfsApplication.class, args);
   }
 

@@ -1,7 +1,6 @@
 package com.losvernos.anzenfs.rbac.user;
 
 import java.util.List;
-import java.util.UUID;
 
 import com.losvernos.anzenfs.files.FileRepository;
 import com.losvernos.anzenfs.rbac.auth.JwtUtils;
@@ -14,7 +13,6 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,20 +23,17 @@ public class UserService implements UserDetailsService {
   private final RoleRepository roleRepository;
   private final FileRepository fileRepository;
   private final AuthenticationConfiguration authenticationConfiguration;
-  private final PasswordEncoder passwordEncoder;
   private final JwtUtils jwtUtils;
 
   public UserService(UserRepository userRepository,
                      RoleRepository roleRepository,
                      FileRepository fileRepository,
                      AuthenticationConfiguration authenticationConfiguration,
-                     PasswordEncoder passwordEncoder,
                      JwtUtils jwtUtils) {
     this.userRepository = userRepository;
     this.roleRepository = roleRepository;
     this.fileRepository = fileRepository;
     this.authenticationConfiguration = authenticationConfiguration;
-    this.passwordEncoder = passwordEncoder;
     this.jwtUtils = jwtUtils;
   }
 
@@ -86,15 +81,12 @@ public class UserService implements UserDetailsService {
 
     User newUser = User.builder()
             .username(request.username())
-            .password(passwordEncoder.encode(request.password()))
+            .password(request.password())
             .userRoles(List.of(personalRole, globalUserRole))
             .build();
 
     userRepository.save(newUser);
 
-    fileRepository.linkFileToRole(rootFolderId, globalUserRole.getID(), "READ");
-
-    String rootFolderUuid = UUID.randomUUID().toString();
     long folderId = fileRepository.createFolder(rootFolderId, request.username());
 
     User savedUser = userRepository.findByUsernameWithRolesAndPermissions(request.username())

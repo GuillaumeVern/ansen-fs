@@ -31,6 +31,21 @@ public class FileService {
 
   private final Path stagingDir = new File(FileUtils.getDataDir(), "staging").toPath();
 
+  public FileNode getHomeFolder(User currentUser) {
+    boolean isAdmin = currentUser.getUserRoles() != null
+            && currentUser.getUserRoles().stream().anyMatch(r -> r.getName().equalsIgnoreCase("ADMIN"));
+
+    if (isAdmin) {
+      return new FileNode("root-uuid", null, "root", "FOLDER", null, 0L);
+    }
+
+    Integer rootId = fileRepository.findIdByNameAndParent("root", null)
+            .orElseThrow(() -> new IllegalStateException("System root folder missing"));
+
+    return fileRepository.findByNameAndParent(currentUser.getUsername(), rootId)
+            .orElseThrow(() -> new IllegalStateException("Home folder missing for user " + currentUser.getUsername()));
+  }
+
   public ResourceAndName getResourceAndName(String externalId) throws FileNotFoundException, MalformedURLException {
     String relativePath = fileRepository.getFullPath(externalId);
 

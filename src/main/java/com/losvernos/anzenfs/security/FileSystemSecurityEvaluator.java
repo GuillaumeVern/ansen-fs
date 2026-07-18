@@ -6,11 +6,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Component("fsSecurity")
 public class FileSystemSecurityEvaluator {
+
+    private record RoleGrant(int depth, long roleId, String level) {}
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -36,7 +37,7 @@ public class FileSystemSecurityEvaluator {
         boolean isAdmin = userRoles.stream().anyMatch(r -> r.getName().equalsIgnoreCase("ADMIN"));
         if (isAdmin) return true;
 
-        StringBuilder sql = new StringBuilder("""
+        String sql = """
             WITH RECURSIVE file_hierarchy(file_id, parent_id, depth) AS (
                 SELECT file_id, parent_id, 0
                 FROM files
@@ -46,27 +47,30 @@ public class FileSystemSecurityEvaluator {
                 FROM files f
                 JOIN file_hierarchy fh ON f.file_id = fh.parent_id
             )
-            SELECT fr.permission_level
+            SELECT fh.depth, fr.role_id, fr.permission_level
             FROM file_hierarchy fh
             JOIN file_roles fr ON fh.file_id = fr.file_id
-            WHERE fr.role_id IN (
-        """);
+            ORDER BY fh.depth ASC;
+        """;
 
-        List<Object> args = new ArrayList<>();
-        args.add(externalId);
+        List<RoleGrant> grants = jdbcTemplate.query(
+                sql,
+                (rs, rowNum) -> new RoleGrant(rs.getInt("depth"), rs.getLong("role_id"), rs.getString("permission_level")),
+                externalId
+        );
 
-        for (int i = 0; i < userRoles.size(); i++) {
-            sql.append(i == 0 ? "?" : ", ?");
-            args.add(userRoles.get(i).getID());
+        if (grants.isEmpty()) {
+            return false;
         }
 
-        sql.append(") ORDER BY fh.depth ASC;");
+        int nearestDepth = grants.stream().mapToInt(RoleGrant::depth).min().orElseThrow();
 
-        List<String> actualLevels = jdbcTemplate.query(
-                sql.toString(),
-                (rs, rowNum) -> rs.getString("permission_level"),
-                args.toArray()
-        );
+        List<Long> userRoleIds = userRoles.stream().map(Role::getID).toList();
+
+        List<String> actualLevels = grants.stream()
+                .filter(g -> g.depth() == nearestDepth && userRoleIds.contains(g.roleId()))
+                .map(RoleGrant::level)
+                .toList();
 
         boolean hasWritePermission = actualLevels.stream().anyMatch("WRITE"::equalsIgnoreCase);
         boolean hasReadPermission = actualLevels.stream().anyMatch("READ"::equalsIgnoreCase);

@@ -16,9 +16,9 @@ export class StoreService {
   private http = inject(HttpClient);
 
   private nodes = signal<FileNode[]>([]);
-  private arianeHistory = signal<string[]>(["Root"]);
+  private arianeHistory = signal<string[]>([]);
   public ariane = this.arianeHistory.asReadonly();
-  private uuidHistory = signal<string[]>(['root-uuid']);
+  private uuidHistory = signal<string[]>([]);
 
   public fileNodes = this.nodes.asReadonly();
   public isLoading = signal(false);
@@ -26,8 +26,25 @@ export class StoreService {
 
   public isExhausted = signal(false);
 
-  async loadFiles(replace = false) {
-    if (this.isLoading() || (!replace && this.isExhausted())) return;
+  private requestToken = 0;
+
+  reset(): void {
+    this.requestToken++;
+    this.nodes.set([]);
+    this.arianeHistory.set([]);
+    this.uuidHistory.set([]);
+    this.isLoading.set(false);
+    this.isExhausted.set(false);
+  }
+
+  async initHome(): Promise<void> {
+    const home = await firstValueFrom(this.http.get<FileNode>('/api/files/home'));
+    this.arianeHistory.set([home.name]);
+    this.uuidHistory.set([home.uuid]);
+  }
+
+  async loadFiles(replace = false): Promise<boolean> {
+    if (this.isLoading() || (!replace && this.isExhausted())) return true;
 
     if (replace) {
       this.isExhausted.set(false);
@@ -41,13 +58,18 @@ export class StoreService {
     if (parentUuid) params = params.set('parentUuid', parentUuid);
     if (!replace && lastNode) params = params.set('lastFileName', lastNode.name);
 
+    const token = this.requestToken;
     this.isLoading.set(true);
     try {
       const newNodes = await firstValueFrom(this.http.get<FileNode[]>("/api/files", { params }));
+      if (token !== this.requestToken) return false;
 
       if (!newNodes || newNodes.length === 0) {
+        if (replace) {
+          this.nodes.set([]);
+        }
         this.isExhausted.set(true);
-        return;
+        return true;
       }
 
       if (replace) {
@@ -63,17 +85,26 @@ export class StoreService {
           return [...old, ...filteredNew];
         });
       }
+      return true;
     } catch (err) {
       console.error("Failed to load files", err);
+      return false;
     } finally {
-      this.isLoading.set(false);
+      if (token === this.requestToken) {
+        this.isLoading.set(false);
+      }
     }
   }
 
-  changeParent(folderName: string, uuid: string) {
+  async changeParent(folderName: string, uuid: string) {
     this.arianeHistory.update(prev => [...prev, folderName]);
     this.uuidHistory.update(prev => [...prev, uuid]);
-    this.loadFiles(true);
+
+    const succeeded = await this.loadFiles(true);
+    if (!succeeded) {
+      this.arianeHistory.update(prev => prev.slice(0, -1));
+      this.uuidHistory.update(prev => prev.slice(0, -1));
+    }
   }
 
   goBack() {
