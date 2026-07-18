@@ -76,7 +76,14 @@ public class FileService {
           incomingPath = incomingPath.getRoot().relativize(incomingPath);
         }
 
-        Path targetLocation = storageRoot.resolve(incomingPath).normalize();
+        Integer rootParentId = fileRepository.findIdByUuid(rootParentUuid).orElse(null);
+        Integer folderId = resolveFolderHierarchy(rootParentId, incomingPath);
+
+        String ancestorPath = fileRepository.getFullPathById(folderId);
+        Path destinationDir = ancestorPath.isEmpty() ? storageRoot : storageRoot.resolve(ancestorPath);
+
+        String fileName = incomingPath.getFileName().toString();
+        Path targetLocation = destinationDir.resolve(fileName).normalize();
         if (!targetLocation.startsWith(storageRoot)) {
           throw new SecurityException("Escape attempt detected: " + incomingPath);
         }
@@ -84,11 +91,7 @@ public class FileService {
         Files.createDirectories(targetLocation.getParent());
         file.transferTo(targetLocation.toFile());
 
-        Integer rootParentId = fileRepository.findIdByUuid(rootParentUuid).orElse(null);
-        Integer folderId = resolveFolderHierarchy(rootParentId, incomingPath);
-
-        String fileName = incomingPath.getFileName().toString();
-        String hash = generateHeuristicHash(incomingPath);
+        String hash = generateHeuristicHash(targetLocation);
         fileRepository.insertFile(folderId, fileName, "FILE", hash);
 
       } catch (Exception e) {
@@ -133,10 +136,9 @@ public class FileService {
     return currentParentId;
   }
 
-  private String generateHeuristicHash(Path file) throws IOException {
+  private String generateHeuristicHash(Path fullPath) throws IOException {
     try {
-      String name = file.toString();
-      Path fullPath = storageRoot.resolve(file);
+      String name = storageRoot.relativize(fullPath).toString();
       long size = Files.size(fullPath);
       long timestamp = Files.getLastModifiedTime(fullPath).toMillis();
 

@@ -142,6 +142,30 @@ public class FileRepository {
         return pathParts.isEmpty() ? null : String.join("/", pathParts);
     }
 
+    public String getFullPathById(Integer fileId) {
+        if (fileId == null) {
+            return "";
+        }
+
+        int maxDepth = 10000;
+        String sql = """
+                WITH RECURSIVE path_builder(level, name, parent_id) AS (
+                  SELECT 0, name, parent_id
+                  FROM files
+                  WHERE file_id = ?
+                  UNION ALL
+                  SELECT pb.level + 1, f.name, f.parent_id
+                  FROM files f
+                  JOIN path_builder pb ON f.file_id = pb.parent_id
+                  WHERE pb.level < ?
+                )
+                SELECT name FROM path_builder ORDER BY level DESC;
+                """;
+
+        List<String> pathParts = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("name"), fileId, maxDepth);
+        return String.join("/", pathParts);
+    }
+
     @Transactional
     public List<String[]> deleteItemAndGetDescendantPaths(String externalId) {
         String selectSql = """
