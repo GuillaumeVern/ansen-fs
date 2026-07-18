@@ -70,7 +70,24 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "coverage": true,
+            "coverageReporters": ["text", "html", "lcov"],
+            "coverageExclude": [
+              "src/main.ts",
+              "src/app/app.config.ts",
+              "src/app/app.routes.ts",
+              "src/app/icons-provider.ts",
+              "src/app/pages/files/files.routes.ts"
+            ],
+            "coverageThresholds": {
+              "statements": 70,
+              "lines": 70,
+              "functions": 70,
+              "branches": 60
+            }
+          }
         }
       }
     }
