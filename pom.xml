@@ -134,6 +134,56 @@
         </configuration>
 			</plugin>
 			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.15</version>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>check</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<excludes>
+										<exclude>com/losvernos/anzenfs/AnzenfsApplication</exclude>
+										<exclude>com/losvernos/anzenfs/configuration/**</exclude>
+										<exclude>com/losvernos/anzenfs/**/*Request</exclude>
+										<exclude>com/losvernos/anzenfs/**/*Response</exclude>
+										<exclude>com/losvernos/anzenfs/files/FileNode</exclude>
+										<exclude>com/losvernos/anzenfs/files/ResourceAndName</exclude>
+										<exclude>com/losvernos/anzenfs/jobs/UploadJobSummary</exclude>
+									</excludes>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.70</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
 				<groupId>com.github.eirslett</groupId>
 				<artifactId>frontend-maven-plugin</artifactId>
 				<version>1.15.0</version>
