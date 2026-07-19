@@ -5,7 +5,6 @@ import {NzCardComponent, NzCardMetaComponent} from 'ng-zorro-antd/card';
 import {NzButtonModule} from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import {HttpEvent, HttpEventType} from '@angular/common/http';
-import {DecimalPipe} from '@angular/common';
 
 type PreviewKind = 'image' | 'pdf' | 'icon';
 
@@ -40,6 +39,18 @@ const TYPE_ICON: Record<FileType, string> = {
   OTHER: 'file',
 };
 
+const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
+
+/** Renders a byte count as a human-readable size, e.g. `1.5 MB` rather than `1572864 bytes`. */
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0 B';
+
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), SIZE_UNITS.length - 1);
+  const value = bytes / Math.pow(1024, exponent);
+
+  return `${exponent === 0 ? value : value.toFixed(1)} ${SIZE_UNITS[exponent]}`;
+}
+
 @Component({
   selector: 'app-store-element',
   imports: [
@@ -47,7 +58,6 @@ const TYPE_ICON: Record<FileType, string> = {
     NzCardMetaComponent,
     NzButtonModule,
     NzIconModule,
-    DecimalPipe,
   ],
   templateUrl: './store-element.html',
   styleUrl: './store-element.scss',
@@ -158,6 +168,11 @@ export class StoreElement implements OnChanges, OnDestroy {
 
   get fallbackIcon(): string {
     return TYPE_ICON[this.data.type];
+  }
+
+  get displaySize(): string {
+    const formatted = formatBytes(this.data.size);
+    return this.data.type === 'FOLDER' ? `${formatted} (folder)` : formatted;
   }
 
   onPreviewError(): void {
