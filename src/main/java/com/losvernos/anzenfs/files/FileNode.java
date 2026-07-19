@@ -4,7 +4,7 @@ public record FileNode(
     String uuid,
     String parentUuid,
     String name,
-    String type,
+    FileType type,
     String hash,
     Long size) {
 }
