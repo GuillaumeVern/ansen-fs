@@ -1,0 +1,35 @@
+<form class="panel-toolbar" [formGroup]="form" (ngSubmit)="add()">
+  <input nz-input formControlName="name" placeholder="New permission name" style="width: 240px;" />
+  <button nz-button nzType="primary" [disabled]="form.invalid">
+    <nz-icon nzType="plus" /> Add permission
+  </button>
+</form>
+
+<nz-table [nzData]="permissions()" [nzShowPagination]="false" nzSize="middle">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th class="actions-col">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for (permission of permissions(); track permission.id) {
+      <tr>
+        <td>{{ permission.name }}</td>
+        <td class="actions-col">
+          <button
+            nz-button
+            nzType="text"
+            nzDanger
+            nzSize="small"
+            nz-popconfirm
+            nzPopconfirmTitle="Delete this permission?"
+            (nzOnConfirm)="remove(permission)"
+          >
+            <nz-icon nzType="delete" /> Delete
+          </button>
+        </td>
+      </tr>
+    }
+  </tbody>
+</nz-table>

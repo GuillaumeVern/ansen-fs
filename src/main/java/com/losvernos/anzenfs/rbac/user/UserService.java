@@ -1,6 +1,7 @@
 package com.losvernos.anzenfs.rbac.user;
 
 import java.util.List;
+import java.util.Optional;
 
 import com.losvernos.anzenfs.files.FileRepository;
 import com.losvernos.anzenfs.rbac.auth.JwtUtils;
@@ -13,28 +14,35 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserService implements UserDetailsService {
 
+  private static final String PROTECTED_ADMIN_USERNAME = "admin";
+  private static final String ADMIN_ROLE_NAME = "ADMIN";
+
   private final UserRepository userRepository;
   private final RoleRepository roleRepository;
   private final FileRepository fileRepository;
   private final AuthenticationConfiguration authenticationConfiguration;
   private final JwtUtils jwtUtils;
+  private final PasswordEncoder passwordEncoder;
 
   public UserService(UserRepository userRepository,
                      RoleRepository roleRepository,
                      FileRepository fileRepository,
                      AuthenticationConfiguration authenticationConfiguration,
-                     JwtUtils jwtUtils) {
+                     JwtUtils jwtUtils,
+                     PasswordEncoder passwordEncoder) {
     this.userRepository = userRepository;
     this.roleRepository = roleRepository;
     this.fileRepository = fileRepository;
     this.authenticationConfiguration = authenticationConfiguration;
     this.jwtUtils = jwtUtils;
+    this.passwordEncoder = passwordEncoder;
   }
 
   @Override
@@ -99,5 +107,63 @@ public class UserService implements UserDetailsService {
             .orElseThrow(() -> new IllegalStateException("Role allocation mapping target missing"));
 
     fileRepository.linkFileToRole(folderId, targetRoleId, "WRITE");
+  }
+
+  public List<UserSummary> listUsers() {
+    return userRepository.getAllWithRoles().stream().map(UserSummary::from).toList();
+  }
+
+  public Optional<UserSummary> getUserSummary(long id) {
+    return userRepository.get(id)
+            .flatMap(u -> userRepository.findByUsernameWithRolesAndPermissions(u.getUsername()))
+            .map(UserSummary::from);
+  }
+
+  public Optional<UserSummary> updateUserRoles(User currentUser, long targetId, List<Long> roleIds) {
+    if (userRepository.get(targetId).isEmpty()) {
+      return Optional.empty();
+    }
+
+    if (targetId == currentUser.getID()) {
+      boolean currentlyAdmin = currentUser.getUserRoles() != null
+              && currentUser.getUserRoles().stream().anyMatch(r -> r.getName().equalsIgnoreCase(ADMIN_ROLE_NAME));
+
+      Optional<Role> adminRole = roleRepository.findByName(ADMIN_ROLE_NAME);
+      boolean willRemainAdmin = adminRole.isPresent() && roleIds.contains(adminRole.get().getID());
+
+      if (currentlyAdmin && !willRemainAdmin) {
+        throw new IllegalStateException("You cannot remove your own ADMIN role.");
+      }
+    }
+
+    userRepository.replaceUserRoles(targetId, roleIds);
+    return getUserSummary(targetId);
+  }
+
+  public boolean deleteUser(User currentUser, long targetId) {
+    if (targetId == currentUser.getID()) {
+      throw new IllegalStateException("You cannot delete your own account.");
+    }
+
+    Optional<User> target = userRepository.get(targetId);
+    if (target.isEmpty()) {
+      return false;
+    }
+
+    if (PROTECTED_ADMIN_USERNAME.equalsIgnoreCase(target.get().getUsername())) {
+      throw new IllegalStateException("The built-in admin account cannot be deleted.");
+    }
+
+    userRepository.deleteById(targetId);
+    return true;
+  }
+
+  public Optional<UserSummary> updatePassword(long id, String newPassword) {
+    if (userRepository.get(id).isEmpty()) {
+      return Optional.empty();
+    }
+
+    userRepository.updatePassword(id, passwordEncoder.encode(newPassword));
+    return getUserSummary(id);
   }
 }
