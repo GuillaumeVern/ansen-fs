@@ -19,6 +19,12 @@
           <nz-icon nzType="folder"/>
           <a routerLink="/files"> Files</a>
         </li>
+        @if (isAdmin()) {
+          <li nz-menu-item nzMatchRouter>
+            <nz-icon nzType="team"/>
+            <a routerLink="/admin"> Admin</a>
+          </li>
+        }
       </ul>
     </ul>
   </nz-sider>

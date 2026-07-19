@@ -2,9 +2,15 @@ package com.losvernos.anzenfs.rbac.permission;
 
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -41,9 +47,25 @@ public class PermissionRepository {
     }
   }
 
-  public void save(Permission elementToSave) {
+  public long save(Permission elementToSave) {
     String sql = "INSERT INTO permissions (permission_name) VALUES (?);";
-    jdbcTemplate.update(sql, elementToSave.getName());
+    KeyHolder keyHolder = new GeneratedKeyHolder();
+
+    jdbcTemplate.update(connection -> {
+      PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+      ps.setString(1, elementToSave.getName());
+      return ps;
+    }, keyHolder);
+
+    return Objects.requireNonNull(keyHolder.getKey()).longValue();
+  }
+
+  @Transactional
+  public void deleteById(long id) {
+    // SQLite foreign-key enforcement isn't enabled on this connection, so ON DELETE
+    // CASCADE in schema.sql doesn't actually run - clean up dependents explicitly.
+    jdbcTemplate.update("DELETE FROM role_permissions WHERE permission_id = ?", id);
+    jdbcTemplate.update("DELETE FROM permissions WHERE permission_id = ?", id);
   }
 
   public void update(Permission elementToUpdate, String[] params) {

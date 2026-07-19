@@ -13,6 +13,7 @@ import org.mockito.MockitoAnnotations;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +39,8 @@ class UserServiceTest {
     private JwtUtils jwtUtils;
     @Mock
     private AuthenticationManager authenticationManager;
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     private UserService userService;
     private AutoCloseable mocks;
@@ -45,7 +48,7 @@ class UserServiceTest {
     @BeforeEach
     void setUp() {
         mocks = MockitoAnnotations.openMocks(this);
-        userService = new UserService(userRepository, roleRepository, fileRepository, authenticationConfiguration, jwtUtils);
+        userService = new UserService(userRepository, roleRepository, fileRepository, authenticationConfiguration, jwtUtils, passwordEncoder);
     }
 
     @Test
@@ -161,5 +164,144 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret")))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void listUsersMapsRepositoryResultsToSummaries() {
+        User user = User.builder().ID(1L).username("alice").userRoles(List.of(new Role(1L, "USER_ROLE", null))).build();
+        when(userRepository.getAllWithRoles()).thenReturn(List.of(user));
+
+        List<UserSummary> summaries = userService.listUsers();
+
+        assertThat(summaries).hasSize(1);
+        assertThat(summaries.get(0).username()).isEqualTo("alice");
+        assertThat(summaries.get(0).roles()).extracting(r -> r.name()).containsExactly("USER_ROLE");
+    }
+
+    @Test
+    void getUserSummaryReturnsEmptyWhenMissing() {
+        when(userRepository.get(99L)).thenReturn(Optional.empty());
+
+        assertThat(userService.getUserSummary(99L)).isEmpty();
+    }
+
+    @Test
+    void getUserSummaryHydratesRolesForExistingUser() {
+        User basic = User.builder().ID(1L).username("alice").build();
+        User withRoles = User.builder().ID(1L).username("alice")
+                .userRoles(List.of(new Role(1L, "USER_ROLE", null)))
+                .build();
+        when(userRepository.get(1L)).thenReturn(Optional.of(basic));
+        when(userRepository.findByUsernameWithRolesAndPermissions("alice")).thenReturn(Optional.of(withRoles));
+
+        Optional<UserSummary> summary = userService.getUserSummary(1L);
+
+        assertThat(summary).isPresent();
+        assertThat(summary.get().roles()).hasSize(1);
+    }
+
+    @Test
+    void updateUserRolesReturnsEmptyWhenTargetMissing() {
+        User currentAdmin = User.builder().ID(1L).username("admin").userRoles(List.of(new Role(1L, "ADMIN", null))).build();
+        when(userRepository.get(99L)).thenReturn(Optional.empty());
+
+        assertThat(userService.updateUserRoles(currentAdmin, 99L, List.of(1L))).isEmpty();
+    }
+
+    @Test
+    void updateUserRolesReplacesRolesForAnotherUser() {
+        User currentAdmin = User.builder().ID(1L).username("admin").userRoles(List.of(new Role(1L, "ADMIN", null))).build();
+        User target = User.builder().ID(2L).username("bob").build();
+        when(userRepository.get(2L)).thenReturn(Optional.of(target));
+        when(userRepository.findByUsernameWithRolesAndPermissions("bob")).thenReturn(Optional.of(target));
+
+        Optional<UserSummary> result = userService.updateUserRoles(currentAdmin, 2L, List.of(5L, 6L));
+
+        org.mockito.Mockito.verify(userRepository).replaceUserRoles(2L, List.of(5L, 6L));
+        assertThat(result).isPresent();
+    }
+
+    @Test
+    void updateUserRolesRejectsSelfRemovalOfAdminRole() {
+        User currentAdmin = User.builder().ID(1L).username("admin").userRoles(List.of(new Role(1L, "ADMIN", null))).build();
+        when(userRepository.get(1L)).thenReturn(Optional.of(currentAdmin));
+        when(roleRepository.findByName("ADMIN")).thenReturn(Optional.of(new Role(1L, "ADMIN", null)));
+
+        assertThatThrownBy(() -> userService.updateUserRoles(currentAdmin, 1L, List.of(2L)))
+                .isInstanceOf(IllegalStateException.class);
+
+        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).replaceUserRoles(any(Long.class), any());
+    }
+
+    @Test
+    void updateUserRolesAllowsSelfUpdateWhenAdminRoleRetained() {
+        User currentAdmin = User.builder().ID(1L).username("admin").userRoles(List.of(new Role(1L, "ADMIN", null))).build();
+        when(userRepository.get(1L)).thenReturn(Optional.of(currentAdmin));
+        when(userRepository.findByUsernameWithRolesAndPermissions("admin")).thenReturn(Optional.of(currentAdmin));
+        when(roleRepository.findByName("ADMIN")).thenReturn(Optional.of(new Role(1L, "ADMIN", null)));
+
+        Optional<UserSummary> result = userService.updateUserRoles(currentAdmin, 1L, List.of(1L, 2L));
+
+        assertThat(result).isPresent();
+        org.mockito.Mockito.verify(userRepository).replaceUserRoles(1L, List.of(1L, 2L));
+    }
+
+    @Test
+    void deleteUserRejectsSelfDeletion() {
+        User currentAdmin = User.builder().ID(1L).username("admin").build();
+
+        assertThatThrownBy(() -> userService.deleteUser(currentAdmin, 1L))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void deleteUserReturnsFalseWhenTargetMissing() {
+        User currentAdmin = User.builder().ID(1L).username("admin").build();
+        when(userRepository.get(2L)).thenReturn(Optional.empty());
+
+        assertThat(userService.deleteUser(currentAdmin, 2L)).isFalse();
+    }
+
+    @Test
+    void deleteUserRejectsDeletingTheBuiltInAdminAccount() {
+        User currentAdmin = User.builder().ID(1L).username("someoneElse").build();
+        User builtInAdmin = User.builder().ID(2L).username("admin").build();
+        when(userRepository.get(2L)).thenReturn(Optional.of(builtInAdmin));
+
+        assertThatThrownBy(() -> userService.deleteUser(currentAdmin, 2L))
+                .isInstanceOf(IllegalStateException.class);
+
+        org.mockito.Mockito.verify(userRepository, org.mockito.Mockito.never()).deleteById(any(Long.class));
+    }
+
+    @Test
+    void deleteUserRemovesAnOrdinaryUser() {
+        User currentAdmin = User.builder().ID(1L).username("admin").build();
+        User target = User.builder().ID(2L).username("bob").build();
+        when(userRepository.get(2L)).thenReturn(Optional.of(target));
+
+        assertThat(userService.deleteUser(currentAdmin, 2L)).isTrue();
+        org.mockito.Mockito.verify(userRepository).deleteById(2L);
+    }
+
+    @Test
+    void updatePasswordReturnsEmptyWhenUserMissing() {
+        when(userRepository.get(99L)).thenReturn(Optional.empty());
+
+        assertThat(userService.updatePassword(99L, "newpass")).isEmpty();
+        org.mockito.Mockito.verify(passwordEncoder, org.mockito.Mockito.never()).encode(any());
+    }
+
+    @Test
+    void updatePasswordEncodesAndStoresNewPassword() {
+        User target = User.builder().ID(1L).username("alice").build();
+        when(userRepository.get(1L)).thenReturn(Optional.of(target));
+        when(userRepository.findByUsernameWithRolesAndPermissions("alice")).thenReturn(Optional.of(target));
+        when(passwordEncoder.encode("newpass")).thenReturn("encoded-newpass");
+
+        Optional<UserSummary> result = userService.updatePassword(1L, "newpass");
+
+        assertThat(result).isPresent();
+        org.mockito.Mockito.verify(userRepository).updatePassword(1L, "encoded-newpass");
     }
 }

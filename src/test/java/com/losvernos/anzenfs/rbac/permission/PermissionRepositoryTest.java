@@ -20,11 +20,19 @@ class PermissionRepositoryTest {
 
     @Test
     void saveThenGetById() {
-        permissionRepository.save(Permission.builder().name("READ").build());
-        long id = jdbcTemplate.queryForObject("SELECT permission_id FROM permissions WHERE permission_name = 'READ'", Long.class);
+        long id = permissionRepository.save(Permission.builder().name("READ").build());
 
         assertThat(permissionRepository.get(id)).isPresent();
         assertThat(permissionRepository.get(id).get().getName()).isEqualTo("READ");
+    }
+
+    @Test
+    void saveReturnsTheGeneratedId() {
+        long id = permissionRepository.save(Permission.builder().name("EXEC").build());
+
+        String storedName = jdbcTemplate.queryForObject(
+                "SELECT permission_name FROM permissions WHERE permission_id = ?", String.class, id);
+        assertThat(storedName).isEqualTo("EXEC");
     }
 
     @Test
@@ -45,5 +53,20 @@ class PermissionRepositoryTest {
         Permission permission = Permission.builder().name("TRANSIENT").build();
         permissionRepository.update(permission, new String[]{});
         permissionRepository.delete(permission);
+    }
+
+    @Test
+    void deleteByIdRemovesPermissionAndItsRoleLinks() {
+        long id = permissionRepository.save(Permission.builder().name("DISPOSABLE").build());
+        jdbcTemplate.update("INSERT INTO roles (role_name) VALUES ('HOLDER')");
+        long roleId = jdbcTemplate.queryForObject("SELECT role_id FROM roles WHERE role_name = 'HOLDER'", Long.class);
+        jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", roleId, id);
+
+        permissionRepository.deleteById(id);
+
+        assertThat(permissionRepository.get(id)).isEmpty();
+        Integer linkCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM role_permissions WHERE permission_id = ?", Integer.class, id);
+        assertThat(linkCount).isZero();
     }
 }

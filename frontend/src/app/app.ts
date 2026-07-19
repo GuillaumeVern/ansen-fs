@@ -18,6 +18,7 @@ export class App {
 
   isCollapsed = false;
   isAuthenticated = this.authService.isAuthenticated;
+  isAdmin = this.authService.isAdmin;
 
   logout() {
     this.authService.logout();

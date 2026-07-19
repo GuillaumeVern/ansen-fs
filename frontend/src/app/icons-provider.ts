@@ -8,7 +8,28 @@ import {
   DownloadOutline,
   HomeOutline,
   FileAddOutline,
-  FolderAddOutline
+  FolderAddOutline,
+  DeleteOutline,
+  TeamOutline,
+  PlusOutline,
+  EditOutline,
+  KeyOutline
 } from '@ant-design/icons-angular/icons';
 
-export const icons = [MenuFoldOutline, MenuUnfoldOutline, DashboardOutline, FormOutline, FolderOutline, FileOutline, DownloadOutline, HomeOutline, FileAddOutline, FolderAddOutline];
+export const icons = [
+  MenuFoldOutline,
+  MenuUnfoldOutline,
+  DashboardOutline,
+  FormOutline,
+  FolderOutline,
+  FileOutline,
+  DownloadOutline,
+  HomeOutline,
+  FileAddOutline,
+  FolderAddOutline,
+  DeleteOutline,
+  TeamOutline,
+  PlusOutline,
+  EditOutline,
+  KeyOutline,
+];

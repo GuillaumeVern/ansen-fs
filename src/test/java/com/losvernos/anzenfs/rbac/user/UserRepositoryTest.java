@@ -172,4 +172,75 @@ class UserRepositoryTest {
         userRepository.update(user, new String[]{});
         userRepository.delete(user);
     }
+
+    @Test
+    void getAllWithRolesAggregatesRolesPerUser() {
+        Role role = Role.builder().name("EDITOR").permissions(List.of()).build();
+        userRepository.save(User.builder().username("withRole").password("pw").userRoles(List.of(role)).build());
+        userRepository.save(User.builder().username("withoutRole").password("pw").build());
+
+        List<User> all = userRepository.getAllWithRoles();
+
+        assertThat(all).extracting(User::getUsername).containsExactlyInAnyOrder("withRole", "withoutRole");
+
+        User withRole = all.stream().filter(u -> u.getUsername().equals("withRole")).findFirst().orElseThrow();
+        assertThat(withRole.getUserRoles()).extracting(Role::getName).containsExactly("EDITOR");
+
+        User withoutRole = all.stream().filter(u -> u.getUsername().equals("withoutRole")).findFirst().orElseThrow();
+        assertThat(withoutRole.getUserRoles()).isEmpty();
+    }
+
+    @Test
+    void replaceUserRolesSwapsRoleAssignments() {
+        Role roleA = Role.builder().name("ROLE_A").permissions(List.of()).build();
+        Role roleB = Role.builder().name("ROLE_B").permissions(List.of()).build();
+        userRepository.save(User.builder().username("swap").password("pw").userRoles(List.of(roleA)).build());
+        long userId = jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE username = 'swap'", Long.class);
+        long roleAId = jdbcTemplate.queryForObject("SELECT role_id FROM roles WHERE role_name = 'ROLE_A'", Long.class);
+
+        userRepository.save(User.builder().username("placeholder").password("pw").userRoles(List.of(roleB)).build());
+        long roleBId = jdbcTemplate.queryForObject("SELECT role_id FROM roles WHERE role_name = 'ROLE_B'", Long.class);
+
+        userRepository.replaceUserRoles(userId, List.of(roleBId));
+
+        List<Long> assignedRoleIds = jdbcTemplate.queryForList(
+                "SELECT role_id FROM user_roles WHERE user_id = ?", Long.class, userId);
+        assertThat(assignedRoleIds).containsExactly(roleBId);
+        assertThat(assignedRoleIds).doesNotContain(roleAId);
+    }
+
+    @Test
+    void replaceUserRolesWithEmptyListClearsAssignments() {
+        Role role = Role.builder().name("SOLO").permissions(List.of()).build();
+        userRepository.save(User.builder().username("clearable").password("pw").userRoles(List.of(role)).build());
+        long userId = jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE username = 'clearable'", Long.class);
+
+        userRepository.replaceUserRoles(userId, List.of());
+
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_roles WHERE user_id = ?", Integer.class, userId);
+        assertThat(count).isZero();
+    }
+
+    @Test
+    void deleteByIdRemovesUser() {
+        userRepository.save(User.builder().username("toDelete").password("pw").build());
+        long userId = jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE username = 'toDelete'", Long.class);
+
+        userRepository.deleteById(userId);
+
+        assertThat(userRepository.get(userId)).isEmpty();
+    }
+
+    @Test
+    void updatePasswordOverwritesStoredHash() {
+        userRepository.save(User.builder().username("pwUser").password("original").build());
+        long userId = jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE username = 'pwUser'", Long.class);
+
+        userRepository.updatePassword(userId, "new-encoded-hash");
+
+        String stored = jdbcTemplate.queryForObject(
+                "SELECT password FROM users WHERE user_id = ?", String.class, userId);
+        assertThat(stored).isEqualTo("new-encoded-hash");
+    }
 }
