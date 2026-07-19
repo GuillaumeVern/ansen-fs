@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { FileNode, StoreService } from './store';
 
 function node(uuid: string, name: string, parentUuid = 'home-uuid'): FileNode {
-  return { uuid, parentUuid, name, type: 'FILE', hash: null as unknown as string, size: 0 };
+  return { uuid, parentUuid, name, type: 'TEXT', hash: null as unknown as string, size: 0 };
 }
 
 describe('StoreService', () => {
@@ -244,6 +244,17 @@ describe('StoreService', () => {
       service.downloadFile('doc-uuid').subscribe();
 
       const req = httpMock.expectOne('/api/files/download/doc-uuid');
+      expect(req.request.method).toBe('GET');
+      expect(req.request.responseType).toBe('blob');
+      req.flush(new Blob(['data']));
+    });
+  });
+
+  describe('getPreview', () => {
+    it('issues a blob GET request through HttpClient so the auth interceptor applies', () => {
+      service.getPreview('img-uuid').subscribe();
+
+      const req = httpMock.expectOne('/api/files/preview/img-uuid');
       expect(req.request.method).toBe('GET');
       expect(req.request.responseType).toBe('blob');
       req.flush(new Blob(['data']));

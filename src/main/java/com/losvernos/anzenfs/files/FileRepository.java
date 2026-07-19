@@ -47,7 +47,7 @@ public class FileRepository {
                     rs.getString("external_id"),
                     null,
                     rs.getString("name"),
-                    rs.getString("type"),
+                    FileType.valueOf(rs.getString("type")),
                     rs.getString("file_hash"),
                     0L
             ), parentId == null ? new Object[]{name} : new Object[]{name, parentId});
@@ -86,16 +86,17 @@ public class FileRepository {
                 rs.getString("external_id"),
                 parentUuid,
                 rs.getString("name"),
-                rs.getString("type"),
+                FileType.valueOf(rs.getString("type")),
                 rs.getString("file_hash"),
                 0L
         ), parentId, parentId, lastFileName, lastFileName, limit);
     }
 
-    public void insertFile(Integer parentId, String name, String type, String hash) {
+    public String insertFile(Integer parentId, String name, FileType type, String hash) {
         String sql = "INSERT INTO files (parent_id, name, type, file_hash, external_id) VALUES (?, ?, ?, ?, ?);";
         String externalId = UUID.randomUUID().toString();
-        jdbcTemplate.update(sql, parentId, name, type, hash, externalId);
+        jdbcTemplate.update(sql, parentId, name, type.name(), hash, externalId);
+        return externalId;
     }
 
     public Integer createFolder(Integer parentId, String name) {
@@ -202,6 +203,24 @@ public class FileRepository {
         }
 
         return deletedMetadata;
+    }
+
+    public record IdAndName(int fileId, String name) {
+    }
+
+    /**
+     * Looks up rows by a raw type string rather than {@link FileType}, since callers such as the
+     * legacy-data backfill need to match values (e.g. the old generic "FILE") that predate the enum
+     * and are intentionally not members of it.
+     */
+    public List<IdAndName> findIdsAndNamesByRawType(String rawType) {
+        String sql = "SELECT file_id, name FROM files WHERE type = ?";
+        return jdbcTemplate.query(sql, (rs, rowNum) ->
+                new IdAndName(rs.getInt("file_id"), rs.getString("name")), rawType);
+    }
+
+    public void updateType(int fileId, FileType type) {
+        jdbcTemplate.update("UPDATE files SET type = ? WHERE file_id = ?", type.name(), fileId);
     }
 
     public void linkFileToRole(long fileId, long roleId, String permissionLevel) {

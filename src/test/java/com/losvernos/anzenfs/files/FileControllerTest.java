@@ -70,7 +70,7 @@ class FileControllerTest {
 
     @Test
     void getHomeFolderReturnsServiceResult() throws Exception {
-        when(fileService.getHomeFolder(user)).thenReturn(new FileNode("home-uuid", null, "alice", "FOLDER", null, 0L));
+        when(fileService.getHomeFolder(user)).thenReturn(new FileNode("home-uuid", null, "alice", FileType.FOLDER, null, 0L));
 
         mockMvc.perform(get("/api/files/home"))
                 .andExpect(status().isOk())
@@ -81,7 +81,7 @@ class FileControllerTest {
     @Test
     void scrollDirectoryDelegatesToService() throws Exception {
         when(fileService.getChildrenAfter(eq("folder-uuid"), isNull(), eq(50), eq(user)))
-                .thenReturn(List.of(new FileNode("f1", "folder-uuid", "a.txt", "FILE", null, 0L)));
+                .thenReturn(List.of(new FileNode("f1", "folder-uuid", "a.txt", FileType.TEXT, null, 0L)));
 
         mockMvc.perform(get("/api/files").param("parentUuid", "folder-uuid"))
                 .andExpect(status().isOk())
@@ -119,19 +119,32 @@ class FileControllerTest {
 
     @Test
     void previewFileReturnsResourceForImage(@TempDir Path tempDir) throws Exception {
-        Path file = tempDir.resolve("pic.txt");
+        Path file = tempDir.resolve("pic.jpg");
         Files.writeString(file, "content", StandardCharsets.UTF_8);
-        when(fileService.getResourceAndName("pic-uuid"))
-                .thenReturn(new ResourceAndName(new FileSystemResource(file), "pic.txt"));
+        when(fileService.getPreviewResource("pic-uuid"))
+                .thenReturn(new ResourceAndName(new FileSystemResource(file), "pic.jpg"));
 
         mockMvc.perform(get("/api/files/preview/pic-uuid"))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Content-Disposition", "inline"));
+                .andExpect(header().string("Content-Disposition", "inline"))
+                .andExpect(header().string("Content-Type", "image/jpeg"));
+    }
+
+    @Test
+    void previewFileHonorsRangeHeaderWithPartialContent(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("clip.mp4");
+        Files.writeString(file, "0123456789", StandardCharsets.UTF_8);
+        when(fileService.getPreviewResource("clip-uuid"))
+                .thenReturn(new ResourceAndName(new FileSystemResource(file), "clip.mp4"));
+
+        mockMvc.perform(get("/api/files/preview/clip-uuid").header("Range", "bytes=0-3"))
+                .andExpect(status().isPartialContent())
+                .andExpect(content().bytes("0123".getBytes(StandardCharsets.UTF_8)));
     }
 
     @Test
     void previewFileReturns404WhenMissing() throws Exception {
-        when(fileService.getResourceAndName("missing")).thenThrow(new FileNotFoundException("nope"));
+        when(fileService.getPreviewResource("missing")).thenThrow(new FileNotFoundException("nope"));
 
         mockMvc.perform(get("/api/files/preview/missing"))
                 .andExpect(status().isNotFound());

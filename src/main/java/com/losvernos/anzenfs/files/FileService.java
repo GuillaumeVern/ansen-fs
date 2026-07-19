@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.losvernos.anzenfs.files.preview.PreviewThumbnailGeneratorRegistry;
 import com.losvernos.anzenfs.rbac.role.Role;
 import com.losvernos.anzenfs.rbac.user.User;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,16 +28,21 @@ public class FileService {
   @Autowired
   private FileRepository fileRepository;
 
+  @Autowired
+  private PreviewThumbnailGeneratorRegistry thumbnailGeneratorRegistry;
+
   private final Path storageRoot = new File(FileUtils.getDataDir(), "data").toPath();
 
   private final Path stagingDir = new File(FileUtils.getDataDir(), "staging").toPath();
+
+  private final Path thumbnailRoot = new File(FileUtils.getDataDir(), "thumbnails").toPath();
 
   public FileNode getHomeFolder(User currentUser) {
     boolean isAdmin = currentUser.getUserRoles() != null
             && currentUser.getUserRoles().stream().anyMatch(r -> r.getName().equalsIgnoreCase("ADMIN"));
 
     if (isAdmin) {
-      return new FileNode("root-uuid", null, "root", "FOLDER", null, 0L);
+      return new FileNode("root-uuid", null, "root", FileType.FOLDER, null, 0L);
     }
 
     Integer rootId = fileRepository.findIdByNameAndParent("root", null)
@@ -63,6 +69,30 @@ public class FileService {
     String fileName = physicalPath.getFileName().toString();
 
     return new ResourceAndName(resource, fileName);
+  }
+
+  /**
+   * Resolves the resource to show for an in-app preview. For types with a generated
+   * thumbnail (currently video), this serves the cached thumbnail image instead of the
+   * original file; everything else falls through to the original file, same as download.
+   */
+  public ResourceAndName getPreviewResource(String externalId) throws FileNotFoundException, MalformedURLException {
+    ResourceAndName original = getResourceAndName(externalId);
+    FileType type = FileType.fromFilename(original.fileName());
+
+    if (thumbnailGeneratorRegistry.forType(type).isPresent()) {
+      Path thumbnailPath = thumbnailPathFor(externalId);
+      if (!Files.exists(thumbnailPath)) {
+        throw new FileNotFoundException("No thumbnail available for: " + externalId);
+      }
+      return new ResourceAndName(new UrlResource(thumbnailPath.toUri()), externalId + ".jpg");
+    }
+
+    return original;
+  }
+
+  private Path thumbnailPathFor(String externalId) {
+    return thumbnailRoot.resolve(externalId + ".jpg");
   }
 
   public void processFolderUpload(String jobId, String rootParentUuid, MultipartFile[] files) {
@@ -92,7 +122,11 @@ public class FileService {
         file.transferTo(targetLocation.toFile());
 
         String hash = generateHeuristicHash(targetLocation);
-        fileRepository.insertFile(folderId, fileName, "FILE", hash);
+        FileType fileType = FileType.fromFilename(fileName);
+        String externalId = fileRepository.insertFile(folderId, fileName, fileType, hash);
+
+        thumbnailGeneratorRegistry.forType(fileType)
+            .ifPresent(generator -> generator.generate(targetLocation, thumbnailPathFor(externalId)));
 
       } catch (Exception e) {
         System.err.println(e);
@@ -169,7 +203,7 @@ public class FileService {
       String itemType = metadata[2];
 
       try {
-        if (!"FOLDER".equals(itemType)) {
+        if (!FileType.FOLDER.name().equals(itemType)) {
           String fileRelativePath = fileRepository.getFullPath(itemExternalId);
 
           if (fileRelativePath == null) {
@@ -180,6 +214,8 @@ public class FileService {
           if (Files.exists(physicalFilePath) && !Files.isDirectory(physicalFilePath)) {
             Files.delete(physicalFilePath);
           }
+
+          Files.deleteIfExists(thumbnailPathFor(itemExternalId));
         }
       } catch (IOException e) {
         System.err.println("Failed to delete physical file asset: " + e.getMessage());

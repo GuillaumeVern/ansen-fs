@@ -13,7 +13,13 @@ import {
   TeamOutline,
   PlusOutline,
   EditOutline,
-  KeyOutline
+  KeyOutline,
+  FileImageOutline,
+  VideoCameraOutline,
+  SoundOutline,
+  FilePdfOutline,
+  FileTextOutline,
+  FileZipOutline
 } from '@ant-design/icons-angular/icons';
 
 export const icons = [
@@ -32,4 +38,10 @@ export const icons = [
   PlusOutline,
   EditOutline,
   KeyOutline,
+  FileImageOutline,
+  VideoCameraOutline,
+  SoundOutline,
+  FilePdfOutline,
+  FileTextOutline,
+  FileZipOutline,
 ];

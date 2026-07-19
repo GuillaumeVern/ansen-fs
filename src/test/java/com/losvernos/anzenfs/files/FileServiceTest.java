@@ -1,5 +1,7 @@
 package com.losvernos.anzenfs.files;
 
+import com.losvernos.anzenfs.files.preview.PreviewThumbnailGenerator;
+import com.losvernos.anzenfs.files.preview.PreviewThumbnailGeneratorRegistry;
 import com.losvernos.anzenfs.rbac.role.Role;
 import com.losvernos.anzenfs.rbac.user.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -35,6 +38,8 @@ class FileServiceTest {
 
     private FileService fileService;
     private Path storageRoot;
+    private Path thumbnailRoot;
+    private PreviewThumbnailGenerator videoThumbnailGenerator;
     private AutoCloseable mocks;
 
     @BeforeEach
@@ -45,6 +50,15 @@ class FileServiceTest {
 
         storageRoot = tempDir.resolve("data");
         ReflectionTestUtils.setField(fileService, "storageRoot", storageRoot);
+
+        thumbnailRoot = tempDir.resolve("thumbnails");
+        ReflectionTestUtils.setField(fileService, "thumbnailRoot", thumbnailRoot);
+
+        videoThumbnailGenerator = mock(PreviewThumbnailGenerator.class);
+        when(videoThumbnailGenerator.supportedType()).thenReturn(FileType.VIDEO);
+        PreviewThumbnailGeneratorRegistry registry =
+                new PreviewThumbnailGeneratorRegistry(List.of(videoThumbnailGenerator));
+        ReflectionTestUtils.setField(fileService, "thumbnailGeneratorRegistry", registry);
     }
 
     // --- getHomeFolder ---
@@ -56,7 +70,7 @@ class FileServiceTest {
 
         FileNode home = fileService.getHomeFolder(user);
 
-        assertThat(home).isEqualTo(new FileNode("root-uuid", null, "root", "FOLDER", null, 0L));
+        assertThat(home).isEqualTo(new FileNode("root-uuid", null, "root", FileType.FOLDER, null, 0L));
     }
 
     @Test
@@ -65,7 +79,7 @@ class FileServiceTest {
         User user = User.builder().username("alice").userRoles(List.of(userRole)).build();
 
         when(fileRepository.findIdByNameAndParent("root", null)).thenReturn(Optional.of(10));
-        FileNode expected = new FileNode("alice-uuid", "root-uuid", "alice", "FOLDER", null, 0L);
+        FileNode expected = new FileNode("alice-uuid", "root-uuid", "alice", FileType.FOLDER, null, 0L);
         when(fileRepository.findByNameAndParent("alice", 10)).thenReturn(Optional.of(expected));
 
         assertThat(fileService.getHomeFolder(user)).isEqualTo(expected);
@@ -148,7 +162,7 @@ class FileServiceTest {
         assertThat(Files.exists(expected)).isTrue();
         assertThat(Files.readString(expected)).isEqualTo("binarydata");
 
-        verify(fileRepository).insertFile(eq(5), eq("photo.jpg"), eq("FILE"), anyString());
+        verify(fileRepository).insertFile(eq(5), eq("photo.jpg"), eq(FileType.IMAGE), anyString());
     }
 
     @Test
@@ -166,7 +180,7 @@ class FileServiceTest {
         assertThat(Files.exists(expected)).isTrue();
 
         verify(fileRepository).createFolder(5, "sub");
-        verify(fileRepository).insertFile(eq(42), eq("nested.txt"), eq("FILE"), anyString());
+        verify(fileRepository).insertFile(eq(42), eq("nested.txt"), eq(FileType.TEXT), anyString());
     }
 
     @Test
@@ -180,7 +194,7 @@ class FileServiceTest {
         fileService.processFolderUpload("job-3", "home-uuid", new MultipartFile[]{file});
 
         verify(fileRepository, never()).createFolder(any(), any());
-        verify(fileRepository).insertFile(eq(42), eq("nested.txt"), eq("FILE"), anyString());
+        verify(fileRepository).insertFile(eq(42), eq("nested.txt"), eq(FileType.TEXT), anyString());
     }
 
     @Test
@@ -204,6 +218,77 @@ class FileServiceTest {
 
         verify(fileRepository, never()).insertFile(any(), any(), any(), any());
         verify(fileRepository, never()).findIdByUuid(any());
+    }
+
+    @Test
+    void processFolderUploadGeneratesThumbnailForVideoFiles() throws Exception {
+        when(fileRepository.findIdByUuid("home-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.getFullPathById(5)).thenReturn("root/alice");
+        when(fileRepository.insertFile(eq(5), eq("clip.mp4"), eq(FileType.VIDEO), anyString()))
+                .thenReturn("clip-external-id");
+
+        MultipartFile file = new MockMultipartFile("files", "clip.mp4", "video/mp4", "moviebytes".getBytes());
+
+        fileService.processFolderUpload("job-6", "home-uuid", new MultipartFile[]{file});
+
+        Path expectedSource = storageRoot.resolve("root/alice/clip.mp4");
+        Path expectedThumbnail = thumbnailRoot.resolve("clip-external-id.jpg");
+        verify(videoThumbnailGenerator).generate(expectedSource, expectedThumbnail);
+    }
+
+    @Test
+    void processFolderUploadDoesNotGenerateThumbnailForNonThumbnailedTypes() throws Exception {
+        when(fileRepository.findIdByUuid("home-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.getFullPathById(5)).thenReturn("root/alice");
+
+        MultipartFile file = new MockMultipartFile("files", "photo.jpg", "image/jpeg", "binarydata".getBytes());
+
+        fileService.processFolderUpload("job-7", "home-uuid", new MultipartFile[]{file});
+
+        verify(videoThumbnailGenerator, never()).generate(any(), any());
+    }
+
+    // --- getPreviewResource ---
+
+    @Test
+    void getPreviewResourceServesCachedThumbnailForVideo() throws Exception {
+        Path videoPath = storageRoot.resolve("root/alice/clip.mp4");
+        Files.createDirectories(videoPath.getParent());
+        Files.writeString(videoPath, "moviebytes");
+        when(fileRepository.getFullPath("clip-uuid")).thenReturn("root/alice/clip.mp4");
+
+        Files.createDirectories(thumbnailRoot);
+        Path thumbnailPath = thumbnailRoot.resolve("clip-uuid.jpg");
+        Files.writeString(thumbnailPath, "jpegbytes");
+
+        ResourceAndName result = fileService.getPreviewResource("clip-uuid");
+
+        assertThat(result.fileName()).isEqualTo("clip-uuid.jpg");
+        assertThat(result.resource().getContentAsString(StandardCharsets.UTF_8)).isEqualTo("jpegbytes");
+    }
+
+    @Test
+    void getPreviewResourceThrowsWhenVideoThumbnailNotYetGenerated() throws Exception {
+        Path videoPath = storageRoot.resolve("root/alice/clip.mp4");
+        Files.createDirectories(videoPath.getParent());
+        Files.writeString(videoPath, "moviebytes");
+        when(fileRepository.getFullPath("clip-uuid")).thenReturn("root/alice/clip.mp4");
+
+        assertThatThrownBy(() -> fileService.getPreviewResource("clip-uuid"))
+                .isInstanceOf(FileNotFoundException.class);
+    }
+
+    @Test
+    void getPreviewResourceServesOriginalFileForNonThumbnailedTypes() throws Exception {
+        Path imagePath = storageRoot.resolve("root/alice/photo.jpg");
+        Files.createDirectories(imagePath.getParent());
+        Files.writeString(imagePath, "imagebytes");
+        when(fileRepository.getFullPath("photo-uuid")).thenReturn("root/alice/photo.jpg");
+
+        ResourceAndName result = fileService.getPreviewResource("photo-uuid");
+
+        assertThat(result.fileName()).isEqualTo("photo.jpg");
+        assertThat(result.resource().getContentAsString(StandardCharsets.UTF_8)).isEqualTo("imagebytes");
     }
 
     // --- getChildrenAfter ---
@@ -268,6 +353,26 @@ class FileServiceTest {
 
         assertThat(fileService.deleteItemByExternalId("doc-uuid")).isTrue();
         assertThat(Files.exists(filePath)).isFalse();
+    }
+
+    @Test
+    void deleteItemByExternalIdRemovesAssociatedThumbnail() throws Exception {
+        Path filePath = storageRoot.resolve("root/alice/clip.mp4");
+        Files.createDirectories(filePath.getParent());
+        Files.writeString(filePath, "moviebytes");
+
+        Files.createDirectories(thumbnailRoot);
+        Path thumbnailPath = thumbnailRoot.resolve("clip-uuid.jpg");
+        Files.writeString(thumbnailPath, "jpegbytes");
+
+        when(fileRepository.getFullPath("clip-uuid")).thenReturn("root/alice/clip.mp4");
+        when(fileRepository.deleteItemAndGetDescendantPaths("clip-uuid"))
+                .thenReturn(List.<String[]>of(new String[]{"clip-uuid", "clip.mp4", "VIDEO"}));
+
+        assertThat(fileService.deleteItemByExternalId("clip-uuid")).isTrue();
+
+        assertThat(Files.exists(filePath)).isFalse();
+        assertThat(Files.exists(thumbnailPath)).isFalse();
     }
 
     @Test

@@ -1,11 +1,44 @@
-import {ChangeDetectorRef, Component, inject, Input, output} from '@angular/core';
-import {StoreService} from '../../../services/store';
-import {FileNode} from '../store';
+import {ChangeDetectorRef, Component, inject, Input, OnChanges, OnDestroy, output, SimpleChanges} from '@angular/core';
+import {DomSanitizer, SafeResourceUrl} from '@angular/platform-browser';
+import {FileNode, FileType, StoreService} from '../../../services/store';
 import {NzCardComponent, NzCardMetaComponent} from 'ng-zorro-antd/card';
 import {NzButtonModule} from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import {HttpEvent, HttpEventType} from '@angular/common/http';
 import {DecimalPipe} from '@angular/common';
+
+type PreviewKind = 'image' | 'pdf' | 'icon';
+
+/**
+ * Which widget renders a file's preview, keyed by its classified type. Video resolves
+ * to 'image' too: the backend serves a generated thumbnail frame for video through the
+ * same preview endpoint, so from here it's indistinguishable from a still image.
+ * Adding preview support for a new type is a one-line change here.
+ */
+const PREVIEW_KIND: Record<FileType, PreviewKind> = {
+  FOLDER: 'icon',
+  IMAGE: 'image',
+  VIDEO: 'image',
+  AUDIO: 'icon',
+  PDF: 'pdf',
+  DOCUMENT: 'icon',
+  ARCHIVE: 'icon',
+  TEXT: 'icon',
+  OTHER: 'icon',
+};
+
+/** Icon shown for the 'icon' preview kind, and as the fallback when a live preview fails to load. */
+const TYPE_ICON: Record<FileType, string> = {
+  FOLDER: 'folder',
+  IMAGE: 'file-image',
+  VIDEO: 'video-camera',
+  AUDIO: 'sound',
+  PDF: 'file-pdf',
+  DOCUMENT: 'file-text',
+  ARCHIVE: 'file-zip',
+  TEXT: 'file-text',
+  OTHER: 'file',
+};
 
 @Component({
   selector: 'app-store-element',
@@ -19,13 +52,53 @@ import {DecimalPipe} from '@angular/common';
   templateUrl: './store-element.html',
   styleUrl: './store-element.scss',
 })
-export class StoreElement {
+export class StoreElement implements OnChanges, OnDestroy {
   @Input({ required: true }) data!: FileNode;
   private storeService = inject(StoreService);
   private cdr = inject(ChangeDetectorRef);
+  private sanitizer = inject(DomSanitizer);
   isDownloading = false;
   progress = 0;
+  protected previewFailed = false;
+  protected previewObjectUrl: string | null = null;
   public delete = output<string>();
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['data']) {
+      this.loadPreview();
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.releasePreviewObjectUrl();
+  }
+
+  private loadPreview(): void {
+    this.releasePreviewObjectUrl();
+    this.previewFailed = false;
+
+    if (this.previewKind === 'icon') {
+      return;
+    }
+
+    this.storeService.getPreview(this.data.uuid).subscribe({
+      next: (blob) => {
+        this.previewObjectUrl = window.URL.createObjectURL(blob);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.previewFailed = true;
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private releasePreviewObjectUrl(): void {
+    if (this.previewObjectUrl) {
+      window.URL.revokeObjectURL(this.previewObjectUrl);
+      this.previewObjectUrl = null;
+    }
+  }
 
   open() {
     if (this.data.type === 'FOLDER') {
@@ -70,10 +143,25 @@ export class StoreElement {
     });
   }
 
-  isSupportedImage(fileName: string): boolean {
-    if (!fileName) return false;
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension || '');
+  get previewKind(): PreviewKind {
+    return PREVIEW_KIND[this.data.type];
+  }
+
+  /**
+   * `iframe[src]` is a RESOURCE_URL security context in Angular, so it must be explicitly
+   * trusted rather than bound as a plain string. Safe here: the URL is always a blob: URL
+   * created locally from the fetched preview, never from user-supplied input.
+   */
+  get trustedPreviewUrl(): SafeResourceUrl | null {
+    return this.previewObjectUrl ? this.sanitizer.bypassSecurityTrustResourceUrl(this.previewObjectUrl) : null;
+  }
+
+  get fallbackIcon(): string {
+    return TYPE_ICON[this.data.type];
+  }
+
+  onPreviewError(): void {
+    this.previewFailed = true;
   }
 
   onDeleteClick(event: MouseEvent): void {

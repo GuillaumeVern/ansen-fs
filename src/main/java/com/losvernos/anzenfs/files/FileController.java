@@ -5,16 +5,17 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 
 import com.losvernos.anzenfs.rbac.user.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpRange;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -104,25 +105,36 @@ public class FileController {
 
   @GetMapping("/preview/{externalId}")
   @PreAuthorize("@fsSecurity.hasAccess(#externalId, 'READ')")
-  public ResponseEntity<Resource> getFilePreview(@PathVariable String externalId) {
+  public ResponseEntity<ResourceRegion> getFilePreview(
+      @PathVariable String externalId,
+      @RequestHeader HttpHeaders headers) {
     try {
-      ResourceAndName fileInfo = fileService.getResourceAndName(externalId);
-      Path originalPath = Paths.get(fileInfo.resource().getURI());
+      ResourceAndName previewInfo = fileService.getPreviewResource(externalId);
+      Resource resource = previewInfo.resource();
+      long contentLength = resource.contentLength();
 
-      String contentType = Files.probeContentType(originalPath);
-      if (contentType == null) {
-        contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+      MediaType mediaType = MediaTypeFactory.getMediaType(previewInfo.fileName())
+              .orElse(MediaType.APPLICATION_OCTET_STREAM);
+
+      List<HttpRange> ranges = headers.getRange();
+      ResourceRegion region;
+      HttpStatus status;
+
+      if (ranges.isEmpty()) {
+        region = new ResourceRegion(resource, 0, contentLength);
+        status = HttpStatus.OK;
+      } else {
+        HttpRange range = ranges.get(0);
+        long start = range.getRangeStart(contentLength);
+        long end = range.getRangeEnd(contentLength);
+        region = new ResourceRegion(resource, start, end - start + 1);
+        status = HttpStatus.PARTIAL_CONTENT;
       }
 
-      Path previewPath = resolvePreviewMirrorPath(originalPath);
-
-      Resource resource = new UrlResource(previewPath.toUri());
-
-      return ResponseEntity.ok()
+      return ResponseEntity.status(status)
               .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
-              .contentType(MediaType.parseMediaType(contentType))
-              .contentLength(resource.contentLength())
-              .body(resource);
+              .contentType(mediaType)
+              .body(region);
 
     } catch (FileNotFoundException e) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
@@ -151,10 +163,6 @@ public class FileController {
               .status(HttpStatus.INTERNAL_SERVER_ERROR)
               .body("An error occurred while deleting the item: " + e.getMessage());
     }
-  }
-
-  private Path resolvePreviewMirrorPath(Path originalPath) {
-    return originalPath;
   }
 
 }
