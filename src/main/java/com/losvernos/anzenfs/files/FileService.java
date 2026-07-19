@@ -123,7 +123,8 @@ public class FileService {
 
         String hash = generateHeuristicHash(targetLocation);
         FileType fileType = FileType.fromFilename(fileName);
-        String externalId = fileRepository.insertFile(folderId, fileName, fileType, hash);
+        long fileSize = Files.size(targetLocation);
+        String externalId = fileRepository.insertFile(folderId, fileName, fileType, hash, fileSize);
 
         thumbnailGeneratorRegistry.forType(fileType)
             .ifPresent(generator -> generator.generate(targetLocation, thumbnailPathFor(externalId)));
@@ -145,7 +146,14 @@ public class FileService {
             ? currentUser.getUserRoles()
             : List.of();
 
-    return fileRepository.getChildrenAfter(parentId, lastFileName, parentUuid, limit, roles);
+    List<FileNode> children = fileRepository.getChildrenAfter(parentId, lastFileName, parentUuid, limit, roles);
+
+    return children.stream()
+        .map(node -> node.type() == FileType.FOLDER
+            ? new FileNode(node.uuid(), node.parentUuid(), node.name(), node.type(), node.hash(),
+                fileRepository.getFolderSize(node.uuid()))
+            : node)
+        .toList();
   }
 
   private Integer resolveFolderHierarchy(Integer rootId, Path path) {

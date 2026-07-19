@@ -22,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -162,7 +163,7 @@ class FileServiceTest {
         assertThat(Files.exists(expected)).isTrue();
         assertThat(Files.readString(expected)).isEqualTo("binarydata");
 
-        verify(fileRepository).insertFile(eq(5), eq("photo.jpg"), eq(FileType.IMAGE), anyString());
+        verify(fileRepository).insertFile(eq(5), eq("photo.jpg"), eq(FileType.IMAGE), anyString(), eq(10L));
     }
 
     @Test
@@ -180,7 +181,7 @@ class FileServiceTest {
         assertThat(Files.exists(expected)).isTrue();
 
         verify(fileRepository).createFolder(5, "sub");
-        verify(fileRepository).insertFile(eq(42), eq("nested.txt"), eq(FileType.TEXT), anyString());
+        verify(fileRepository).insertFile(eq(42), eq("nested.txt"), eq(FileType.TEXT), anyString(), eq(6L));
     }
 
     @Test
@@ -194,7 +195,7 @@ class FileServiceTest {
         fileService.processFolderUpload("job-3", "home-uuid", new MultipartFile[]{file});
 
         verify(fileRepository, never()).createFolder(any(), any());
-        verify(fileRepository).insertFile(eq(42), eq("nested.txt"), eq(FileType.TEXT), anyString());
+        verify(fileRepository).insertFile(eq(42), eq("nested.txt"), eq(FileType.TEXT), anyString(), eq(6L));
     }
 
     @Test
@@ -206,7 +207,7 @@ class FileServiceTest {
 
         fileService.processFolderUpload("job-4", "home-uuid", new MultipartFile[]{file});
 
-        verify(fileRepository, never()).insertFile(any(), any(), any(), any());
+        verify(fileRepository, never()).insertFile(any(), any(), any(), any(), anyLong());
     }
 
     @Test
@@ -216,7 +217,7 @@ class FileServiceTest {
 
         fileService.processFolderUpload("job-5", "home-uuid", new MultipartFile[]{file});
 
-        verify(fileRepository, never()).insertFile(any(), any(), any(), any());
+        verify(fileRepository, never()).insertFile(any(), any(), any(), any(), anyLong());
         verify(fileRepository, never()).findIdByUuid(any());
     }
 
@@ -224,7 +225,7 @@ class FileServiceTest {
     void processFolderUploadGeneratesThumbnailForVideoFiles() throws Exception {
         when(fileRepository.findIdByUuid("home-uuid")).thenReturn(Optional.of(5));
         when(fileRepository.getFullPathById(5)).thenReturn("root/alice");
-        when(fileRepository.insertFile(eq(5), eq("clip.mp4"), eq(FileType.VIDEO), anyString()))
+        when(fileRepository.insertFile(eq(5), eq("clip.mp4"), eq(FileType.VIDEO), anyString(), eq(10L)))
                 .thenReturn("clip-external-id");
 
         MultipartFile file = new MockMultipartFile("files", "clip.mp4", "video/mp4", "moviebytes".getBytes());
@@ -302,6 +303,24 @@ class FileServiceTest {
         fileService.getChildrenAfter("folder-uuid", null, 50, user);
 
         verify(fileRepository).getChildrenAfter(eq(7), any(), eq("folder-uuid"), eq(50), eq(user.getUserRoles()));
+    }
+
+    @Test
+    void getChildrenAfterReplacesFolderSizeWithRecursiveTotalButLeavesFilesAsIs() {
+        User user = User.builder().username("alice").userRoles(List.of(new Role(1L, "USER_ROLE", null))).build();
+        FileNode folder = new FileNode("folder-uuid", "root-uuid", "Docs", FileType.FOLDER, null, 0L);
+        FileNode file = new FileNode("file-uuid", "root-uuid", "a.txt", FileType.TEXT, "hash", 42L);
+
+        when(fileRepository.getChildrenAfter(isNull(), isNull(), isNull(), eq(50), any()))
+                .thenReturn(List.of(folder, file));
+        when(fileRepository.getFolderSize("folder-uuid")).thenReturn(999L);
+
+        List<FileNode> result = fileService.getChildrenAfter(null, null, 50, user);
+
+        assertThat(result).extracting(FileNode::uuid, FileNode::size)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("folder-uuid", 999L),
+                        org.assertj.core.groups.Tuple.tuple("file-uuid", 42L));
     }
 
     @Test

@@ -109,6 +109,24 @@ describe('StoreElement', () => {
     });
   });
 
+  describe('displaySize', () => {
+    it('formats a byte count into a human-readable size', () => {
+      fixture.componentRef.setInput('data', { ...imageNode, size: 1536 });
+      expect(component.displaySize).toBe('1.5 KB');
+
+      fixture.componentRef.setInput('data', { ...imageNode, size: 0 });
+      expect(component.displaySize).toBe('0 B');
+
+      fixture.componentRef.setInput('data', { ...imageNode, size: 5 * 1024 * 1024 });
+      expect(component.displaySize).toBe('5.0 MB');
+    });
+
+    it('tags folder sizes distinctly from file sizes', () => {
+      fixture.componentRef.setInput('data', { ...folderNode, size: 2 * 1024 * 1024 * 1024 });
+      expect(component.displaySize).toBe('2.0 GB (folder)');
+    });
+  });
+
   describe('preview loading', () => {
     it('fetches the preview as a blob through the store service, keyed by uuid', () => {
       fixture.componentRef.setInput('data', imageNode);

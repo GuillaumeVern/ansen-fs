@@ -24,6 +24,34 @@ public class FileRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * schema.sql's CREATE TABLE IF NOT EXISTS only takes effect for brand-new databases, so
+     * this is how {@link com.losvernos.anzenfs.database.FileSizeBackfillRunner} detects
+     * installs from before file sizes were tracked.
+     */
+    public boolean hasSizeColumn() {
+        List<String> columns = jdbcTemplate.query(
+                "PRAGMA table_info(files)", (rs, rowNum) -> rs.getString("name"));
+        return columns.contains("size_bytes");
+    }
+
+    public void addSizeColumn() {
+        jdbcTemplate.execute("ALTER TABLE files ADD COLUMN size_bytes INTEGER DEFAULT 0");
+    }
+
+    public record IdAndExternalId(int fileId, String externalId) {
+    }
+
+    public List<IdAndExternalId> findNonFolderIdsAndExternalIds() {
+        return jdbcTemplate.query(
+                "SELECT file_id, external_id FROM files WHERE type != 'FOLDER'",
+                (rs, rowNum) -> new IdAndExternalId(rs.getInt("file_id"), rs.getString("external_id")));
+    }
+
+    public void updateFileSize(int fileId, long size) {
+        jdbcTemplate.update("UPDATE files SET size_bytes = ? WHERE file_id = ?", size, fileId);
+    }
+
     public Optional<Integer> findIdByNameAndParent(String name, Integer parentId) {
         String sql = "SELECT file_id FROM files WHERE name = ? AND " +
                 (parentId == null ? "parent_id IS NULL" : "parent_id = ?");
@@ -88,15 +116,35 @@ public class FileRepository {
                 rs.getString("name"),
                 FileType.valueOf(rs.getString("type")),
                 rs.getString("file_hash"),
-                0L
+                rs.getLong("size_bytes")
         ), parentId, parentId, lastFileName, lastFileName, limit);
     }
 
-    public String insertFile(Integer parentId, String name, FileType type, String hash) {
-        String sql = "INSERT INTO files (parent_id, name, type, file_hash, external_id) VALUES (?, ?, ?, ?, ?);";
+    public String insertFile(Integer parentId, String name, FileType type, String hash, long size) {
+        String sql = "INSERT INTO files (parent_id, name, type, file_hash, external_id, size_bytes) VALUES (?, ?, ?, ?, ?, ?);";
         String externalId = UUID.randomUUID().toString();
-        jdbcTemplate.update(sql, parentId, name, type.name(), hash, externalId);
+        jdbcTemplate.update(sql, parentId, name, type.name(), hash, externalId, size);
         return externalId;
+    }
+
+    /**
+     * Sums size_bytes across a folder and everything under it. Folder rows themselves have no
+     * meaningful size_bytes of their own (SUM ignores their default of 0/NULL contribution
+     * beyond what their descendant files carry), so this recursion is what makes a folder's
+     * size reflect its actual contents.
+     */
+    public long getFolderSize(String externalId) {
+        String sql = """
+                WITH RECURSIVE descendants(file_id) AS (
+                  SELECT file_id FROM files WHERE external_id = ?
+                  UNION ALL
+                  SELECT f.file_id FROM files f JOIN descendants d ON f.parent_id = d.file_id
+                )
+                SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE file_id IN (SELECT file_id FROM descendants);
+                """;
+
+        Long total = jdbcTemplate.queryForObject(sql, Long.class, externalId);
+        return total != null ? total : 0L;
     }
 
     public Integer createFolder(Integer parentId, String name) {

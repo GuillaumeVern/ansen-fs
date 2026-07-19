@@ -29,6 +29,13 @@ class FileRepositoryTest {
         return jdbcTemplate.queryForObject("SELECT file_id FROM files WHERE external_id = ?", Long.class, externalId);
     }
 
+    private long insertRawWithSize(String name, Long parentId, String type, String externalId, long size) {
+        jdbcTemplate.update(
+                "INSERT INTO files (external_id, parent_id, name, type, size_bytes) VALUES (?, ?, ?, ?, ?)",
+                externalId, parentId, name, type, size);
+        return jdbcTemplate.queryForObject("SELECT file_id FROM files WHERE external_id = ?", Long.class, externalId);
+    }
+
     @Test
     void findIdByNameAndParentFindsTopLevelEntry() {
         insertRaw("root", null, "FOLDER", "root-uuid");
@@ -92,6 +99,17 @@ class FileRepositoryTest {
     }
 
     @Test
+    void getChildrenAfterReturnsStoredFileSize() {
+        long rootId = insertRaw("root", null, "FOLDER", "root-uuid");
+        insertRawWithSize("doc.txt", rootId, "TEXT", "doc-uuid", 4096L);
+
+        List<Role> roles = List.of(new Role(1L, "USER_ROLE", null));
+        List<FileNode> children = fileRepository.getChildrenAfter((int) rootId, null, "root-uuid", 50, roles);
+
+        assertThat(children).extracting(FileNode::size).containsExactly(4096L);
+    }
+
+    @Test
     void getChildrenAfterFiltersByNullParentForTopLevel() {
         insertRaw("root", null, "FOLDER", "root-uuid");
         insertRaw("otherRoot", null, "FOLDER", "other-uuid");
@@ -104,7 +122,7 @@ class FileRepositoryTest {
 
     @Test
     void insertFileCreatesRowWithGeneratedExternalId() {
-        fileRepository.insertFile(null, "doc.txt", FileType.TEXT, "somehash");
+        fileRepository.insertFile(null, "doc.txt", FileType.TEXT, "somehash", 1234L);
 
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM files WHERE name = ? AND type = 'TEXT' AND file_hash = ?",
@@ -114,6 +132,28 @@ class FileRepositoryTest {
         String externalId = jdbcTemplate.queryForObject(
                 "SELECT external_id FROM files WHERE name = ?", String.class, "doc.txt");
         assertThat(externalId).isNotBlank();
+
+        Long size = jdbcTemplate.queryForObject(
+                "SELECT size_bytes FROM files WHERE name = ?", Long.class, "doc.txt");
+        assertThat(size).isEqualTo(1234L);
+    }
+
+    @Test
+    void getFolderSizeSumsAllDescendantFilesRegardlessOfDepth() {
+        long rootId = insertRaw("root", null, "FOLDER", "root-uuid");
+        long subId = insertRaw("sub", rootId, "FOLDER", "sub-uuid");
+        insertRawWithSize("a.txt", rootId, "TEXT", "a-uuid", 100L);
+        insertRawWithSize("b.txt", subId, "TEXT", "b-uuid", 250L);
+
+        assertThat(fileRepository.getFolderSize("root-uuid")).isEqualTo(350L);
+        assertThat(fileRepository.getFolderSize("sub-uuid")).isEqualTo(250L);
+    }
+
+    @Test
+    void getFolderSizeReturnsZeroForEmptyFolder() {
+        insertRaw("empty", null, "FOLDER", "empty-uuid");
+
+        assertThat(fileRepository.getFolderSize("empty-uuid")).isZero();
     }
 
     @Test
@@ -213,5 +253,31 @@ class FileRepositoryTest {
                 "SELECT COUNT(*) FROM file_roles WHERE file_id = ? AND role_id = ?",
                 Integer.class, fileId, 1L);
         assertThat(afterUnlink).isZero();
+    }
+
+    @Test
+    void hasSizeColumnIsTrueOnTheCurrentSchema() {
+        assertThat(fileRepository.hasSizeColumn()).isTrue();
+    }
+
+    @Test
+    void findNonFolderIdsAndExternalIdsExcludesFolders() {
+        long rootId = insertRaw("root", null, "FOLDER", "root-uuid");
+        insertRaw("doc.txt", rootId, "TEXT", "doc-uuid");
+
+        assertThat(fileRepository.findNonFolderIdsAndExternalIds())
+                .extracting(FileRepository.IdAndExternalId::externalId)
+                .containsExactly("doc-uuid");
+    }
+
+    @Test
+    void updateFileSizeSetsTheStoredSize() {
+        long fileId = insertRaw("doc.txt", null, "TEXT", "doc-uuid");
+
+        fileRepository.updateFileSize((int) fileId, 777L);
+
+        Long size = jdbcTemplate.queryForObject(
+                "SELECT size_bytes FROM files WHERE external_id = ?", Long.class, "doc-uuid");
+        assertThat(size).isEqualTo(777L);
     }
 }
