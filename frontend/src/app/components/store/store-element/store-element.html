@@ -33,15 +33,27 @@
 
 <ng-template #coverTemplate>
   <div class="card-cover-wrapper">
-    @if (isSupportedImage(data.name)) {
-      <img [alt]="data.name"
-           [src]="'/api/files/preview/' + data.uuid"
-           loading="lazy"
-           class="preview-thumb" />
-    } @else {
+    @if (previewFailed || !previewObjectUrl) {
       <div class="file-icon-placeholder">
-        <nz-icon [nzType]="data.type === 'FOLDER' ? 'folder' : 'file'" />
+        <nz-icon [nzType]="fallbackIcon" />
       </div>
+    } @else {
+      @switch (previewKind) {
+        @case ('image') {
+          <img [alt]="data.name"
+               [src]="previewObjectUrl"
+               class="preview-thumb"
+               (error)="onPreviewError()" />
+        }
+        @case ('pdf') {
+          <iframe [src]="trustedPreviewUrl" class="preview-pdf" title="PDF preview"></iframe>
+        }
+        @default {
+          <div class="file-icon-placeholder">
+            <nz-icon [nzType]="fallbackIcon" />
+          </div>
+        }
+      }
     }
   </div>
 </ng-template>

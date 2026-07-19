@@ -17,15 +17,6 @@ import {Upload} from '../upload/upload';
 import {NzIconDirective} from 'ng-zorro-antd/icon';
 import {NzButtonComponent} from 'ng-zorro-antd/button';
 
-export interface FileNode {
-  uuid: string
-  parentUuid: string
-  name: string
-  type: string
-  hash: string
-  size: number
-}
-
 @Component({
   selector: 'app-store',
   imports: [ScrollingModule, StoreElement, NzBreadCrumbComponent, NzBreadCrumbItemComponent, NzIconDirective, NzButtonComponent],

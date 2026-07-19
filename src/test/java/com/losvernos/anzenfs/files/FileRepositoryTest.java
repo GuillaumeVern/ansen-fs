@@ -56,7 +56,7 @@ class FileRepositoryTest {
         assertThat(found).isPresent();
         assertThat(found.get().uuid()).isEqualTo("alice-uuid");
         assertThat(found.get().name()).isEqualTo("alice");
-        assertThat(found.get().type()).isEqualTo("FOLDER");
+        assertThat(found.get().type()).isEqualTo(FileType.FOLDER);
     }
 
     @Test
@@ -77,9 +77,9 @@ class FileRepositoryTest {
     @Test
     void getChildrenAfterOrdersByNameAndRespectsLimitAndCursor() {
         long rootId = insertRaw("root", null, "FOLDER", "root-uuid");
-        insertRaw("banana.txt", rootId, "FILE", "f-banana");
-        insertRaw("apple.txt", rootId, "FILE", "f-apple");
-        insertRaw("cherry.txt", rootId, "FILE", "f-cherry");
+        insertRaw("banana.txt", rootId, "TEXT", "f-banana");
+        insertRaw("apple.txt", rootId, "TEXT", "f-apple");
+        insertRaw("cherry.txt", rootId, "TEXT", "f-cherry");
 
         List<Role> roles = List.of(new Role(1L, "USER_ROLE", null));
 
@@ -104,10 +104,10 @@ class FileRepositoryTest {
 
     @Test
     void insertFileCreatesRowWithGeneratedExternalId() {
-        fileRepository.insertFile(null, "doc.txt", "FILE", "somehash");
+        fileRepository.insertFile(null, "doc.txt", FileType.TEXT, "somehash");
 
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM files WHERE name = ? AND type = 'FILE' AND file_hash = ?",
+                "SELECT COUNT(*) FROM files WHERE name = ? AND type = 'TEXT' AND file_hash = ?",
                 Integer.class, "doc.txt", "somehash");
         assertThat(count).isEqualTo(1);
 
@@ -140,7 +140,7 @@ class FileRepositoryTest {
         long rootId = insertRaw("root", null, "FOLDER", "root-uuid");
         long aliceId = insertRaw("alice", rootId, "FOLDER", "alice-uuid");
         long subId = insertRaw("docs", aliceId, "FOLDER", "docs-uuid");
-        insertRaw("report.txt", subId, "FILE", "report-uuid");
+        insertRaw("report.txt", subId, "TEXT", "report-uuid");
 
         assertThat(fileRepository.getFullPath("report-uuid")).isEqualTo("root/alice/docs/report.txt");
     }
@@ -167,7 +167,7 @@ class FileRepositoryTest {
     void deleteItemAndGetDescendantPathsRemovesFolderAndChildren() {
         long rootId = insertRaw("root", null, "FOLDER", "root-uuid");
         long folderId = insertRaw("folder", rootId, "FOLDER", "folder-uuid");
-        insertRaw("inner.txt", folderId, "FILE", "inner-uuid");
+        insertRaw("inner.txt", folderId, "TEXT", "inner-uuid");
 
         List<String[]> deleted = fileRepository.deleteItemAndGetDescendantPaths("folder-uuid");
 
@@ -190,7 +190,7 @@ class FileRepositoryTest {
 
     @Test
     void linkAndUnlinkFileFromRole() {
-        long fileId = insertRaw("doc", null, "FILE", "doc-uuid");
+        long fileId = insertRaw("doc", null, "OTHER", "doc-uuid");
 
         fileRepository.linkFileToRole(fileId, 1L, "read");
         String level = jdbcTemplate.queryForObject(

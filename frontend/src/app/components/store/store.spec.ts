@@ -122,7 +122,7 @@ describe('Store', () => {
     });
 
     it('does nothing while already loading', async () => {
-      storeServiceStub.setNodes([{ uuid: '1', name: 'a', type: 'FILE', parentUuid: 'p', hash: null, size: 0 }]);
+      storeServiceStub.setNodes([{ uuid: '1', name: 'a', type: 'TEXT', parentUuid: 'p', hash: null, size: 0 }]);
       await fixture.whenStable();
       fixture.detectChanges();
       storeServiceStub.loadFiles.mockClear();

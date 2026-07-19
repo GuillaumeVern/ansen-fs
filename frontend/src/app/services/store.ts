@@ -2,11 +2,22 @@ import { inject, Injectable, signal, computed } from '@angular/core';
 import {HttpClient, HttpEvent, HttpParams} from '@angular/common/http';
 import {firstValueFrom, Observable} from 'rxjs';
 
+export type FileType =
+  | 'FOLDER'
+  | 'IMAGE'
+  | 'VIDEO'
+  | 'AUDIO'
+  | 'PDF'
+  | 'DOCUMENT'
+  | 'ARCHIVE'
+  | 'TEXT'
+  | 'OTHER';
+
 export interface FileNode {
   uuid: string;
   parentUuid: string;
   name: string;
-  type: string;
+  type: FileType;
   hash: string;
   size: number;
 }
@@ -128,6 +139,15 @@ export class StoreService {
       reportProgress: true,
       observe: 'events'
     });
+  }
+
+  /**
+   * Fetched as a blob through HttpClient (rather than a plain <img>/<iframe> src) so the
+   * auth interceptor attaches the JWT bearer token - browsers never attach it to native
+   * resource loads, so a bare URL binding gets a 403 from the backend.
+   */
+  getPreview(uuid: string): Observable<Blob> {
+    return this.http.get(`/api/files/preview/${uuid}`, { responseType: 'blob' });
   }
 
   async deleteItem(uuid: string): Promise<boolean> {
