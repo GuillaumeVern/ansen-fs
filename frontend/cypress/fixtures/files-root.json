@@ -1,0 +1,4 @@
+[
+  { "uuid": "folder-1", "parentUuid": "home-uuid", "name": "Documents", "type": "FOLDER", "hash": "", "size": 0 },
+  { "uuid": "file-1", "parentUuid": "home-uuid", "name": "notes.txt", "type": "TEXT", "hash": "abc123", "size": 2048 }
+]

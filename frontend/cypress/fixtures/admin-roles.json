@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "name": "ADMIN",
+    "permissions": [
+      { "id": 1, "name": "READ" },
+      { "id": 2, "name": "WRITE" }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "USER_ROLE",
+    "permissions": [{ "id": 1, "name": "READ" }]
+  }
+]

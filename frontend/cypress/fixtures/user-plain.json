@@ -1,0 +1,5 @@
+{
+  "id": 2,
+  "username": "alice",
+  "roles": [{ "id": 2, "name": "USER_ROLE", "permissions": [] }]
+}

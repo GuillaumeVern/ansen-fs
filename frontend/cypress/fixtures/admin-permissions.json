@@ -1,0 +1,4 @@
+[
+  { "id": 1, "name": "READ" },
+  { "id": 2, "name": "WRITE" }
+]

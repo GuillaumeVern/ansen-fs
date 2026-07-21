@@ -1,0 +1,3 @@
+[
+  { "uuid": "file-2", "parentUuid": "folder-1", "name": "report.pdf", "type": "PDF", "hash": "def456", "size": 10240 }
+]
