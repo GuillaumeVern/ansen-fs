@@ -1,7 +1,15 @@
 <form class="panel-toolbar" [formGroup]="form" (ngSubmit)="add()">
-  <input nz-input formControlName="name" placeholder="New permission name" style="width: 240px;" />
+  <label class="sr-only" for="new-permission-name">New permission name</label>
+  <input
+    id="new-permission-name"
+    nz-input
+    formControlName="name"
+    placeholder="New permission name"
+    style="width: 240px;"
+    [attr.aria-invalid]="form.controls.name.invalid && form.controls.name.touched ? true : null"
+  />
   <button nz-button nzType="primary" [disabled]="form.invalid">
-    <nz-icon nzType="plus" /> Add permission
+    <nz-icon nzType="plus" aria-hidden="true" /> Add permission
   </button>
 </form>
 
@@ -22,11 +30,12 @@
             nzType="text"
             nzDanger
             nzSize="small"
+            [attr.aria-label]="'Delete permission ' + permission.name"
             nz-popconfirm
             nzPopconfirmTitle="Delete this permission?"
             (nzOnConfirm)="remove(permission)"
           >
-            <nz-icon nzType="delete" /> Delete
+            <nz-icon nzType="delete" aria-hidden="true" /> Delete
           </button>
         </td>
       </tr>

@@ -1,20 +1,21 @@
 <div class="workspace-drop-wrapper"
      [class.active-drag-catch]="isDraggingOver"
      (window:dragover)="onDragOver($any($event))"
+     (window:keydown.escape)="onEscapeKey()"
      (dragover)="onDragOver($event)"
      (dragleave)="onDragLeave($event)"
      (drop)="onFileDrop($event)">
 
   @if (isDraggingOver) {
-    <div class="glass-drop-overlay" (click)="cancelDragOverlay($event)">
+    <div class="glass-drop-overlay" role="status" aria-live="assertive" (click)="cancelDragOverlay($event)">
       <div class="overlay-inner-message">
-        <nz-icon nzType="cloud-upload" />
+        <nz-icon nzType="cloud-upload" aria-hidden="true" />
         <h2>Drop anywhere to upload items</h2>
-        <p style="margin-top: 8px; font-size: 14px; opacity: 0.8;">(click anywhere to cancel)</p>
+        <p style="margin-top: 8px; font-size: 14px; opacity: 0.8;">(click anywhere, or press Escape, to cancel)</p>
       </div>
     </div>
   }
 
-  <input type="file" #fileInput multiple (change)="onItemsSelected($event); uploadItems()" style="display: none;">
-  <input type="file" #folderInput webkitdirectory directory multiple (change)="onItemsSelected($event); uploadItems()" style="display: none;">
+  <input type="file" #fileInput multiple aria-label="Choose files to upload" (change)="onItemsSelected($event); uploadItems()" style="display: none;">
+  <input type="file" #folderInput webkitdirectory directory multiple aria-label="Choose a folder to upload" (change)="onItemsSelected($event); uploadItems()" style="display: none;">
 </div>

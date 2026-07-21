@@ -103,6 +103,14 @@ export class Store implements OnInit {
     this.storeService.jumpToBreadcrumbIndex(targetIndex);
   }
 
+  onCrumbKeydown(event: KeyboardEvent, index: number, isLast: boolean): void {
+    if (isLast) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.navigateToIndex(index);
+    }
+  }
+
   deleteItem(uuid: string): void {
     this.storeService.deleteItem(uuid).then(success => {
       if (!success) {

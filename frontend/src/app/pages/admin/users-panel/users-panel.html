@@ -1,6 +1,6 @@
 <div class="panel-toolbar">
   <button nz-button nzType="primary" (click)="openCreateModal()">
-    <nz-icon nzType="plus" /> New user
+    <nz-icon nzType="plus" aria-hidden="true" /> New user
   </button>
 </div>
 
@@ -22,11 +22,11 @@
           }
         </td>
         <td class="actions-col">
-          <button nz-button nzType="text" nzSize="small" (click)="openEditRoles(user)">
-            <nz-icon nzType="edit" /> Edit roles
+          <button nz-button nzType="text" nzSize="small" [attr.aria-label]="'Edit roles for ' + user.username" (click)="openEditRoles(user)">
+            <nz-icon nzType="edit" aria-hidden="true" /> Edit roles
           </button>
-          <button nz-button nzType="text" nzSize="small" (click)="openResetPassword(user)">
-            <nz-icon nzType="key" /> Reset password
+          <button nz-button nzType="text" nzSize="small" [attr.aria-label]="'Reset password for ' + user.username" (click)="openResetPassword(user)">
+            <nz-icon nzType="key" aria-hidden="true" /> Reset password
           </button>
           <button
             nz-button
@@ -34,11 +34,12 @@
             nzDanger
             nzSize="small"
             [disabled]="user.id === currentUserId()"
+            [attr.aria-label]="'Delete user ' + user.username"
             nz-popconfirm
             nzPopconfirmTitle="Delete this user?"
             (nzOnConfirm)="deleteUser(user)"
           >
-            <nz-icon nzType="delete" /> Delete
+            <nz-icon nzType="delete" aria-hidden="true" /> Delete
           </button>
         </td>
       </tr>
@@ -56,12 +57,27 @@
     <form nz-form [formGroup]="createForm">
       <nz-form-item>
         <nz-form-control nzErrorTip="Username is required">
-          <input nz-input formControlName="username" placeholder="Username" />
+          <label class="sr-only" for="new-user-username">Username</label>
+          <input
+            id="new-user-username"
+            nz-input
+            formControlName="username"
+            placeholder="Username"
+            [attr.aria-invalid]="createForm.controls.username.invalid && createForm.controls.username.touched ? true : null"
+          />
         </nz-form-control>
       </nz-form-item>
       <nz-form-item>
         <nz-form-control nzErrorTip="Password is required">
-          <input nz-input type="password" formControlName="password" placeholder="Password" />
+          <label class="sr-only" for="new-user-password">Password</label>
+          <input
+            id="new-user-password"
+            nz-input
+            type="password"
+            formControlName="password"
+            placeholder="Password"
+            [attr.aria-invalid]="createForm.controls.password.invalid && createForm.controls.password.touched ? true : null"
+          />
         </nz-form-control>
       </nz-form-item>
     </form>
@@ -78,6 +94,7 @@
     <nz-select
       style="width: 100%"
       nzMode="multiple"
+      aria-label="Roles for this user"
       nzPlaceHolder="Select roles"
       [ngModel]="selectedRoleIds()"
       (ngModelChange)="selectedRoleIds.set($event)"
@@ -99,7 +116,15 @@
     <form nz-form [formGroup]="passwordForm">
       <nz-form-item>
         <nz-form-control nzErrorTip="New password is required">
-          <input nz-input type="password" formControlName="newPassword" placeholder="New password" />
+          <label class="sr-only" for="reset-password-new">New password</label>
+          <input
+            id="reset-password-new"
+            nz-input
+            type="password"
+            formControlName="newPassword"
+            placeholder="New password"
+            [attr.aria-invalid]="passwordForm.controls.newPassword.invalid && passwordForm.controls.newPassword.touched ? true : null"
+          />
         </nz-form-control>
       </nz-form-item>
     </form>

@@ -1,6 +1,6 @@
 <div class="panel-toolbar">
   <button nz-button nzType="primary" (click)="openCreate()">
-    <nz-icon nzType="plus" /> New role
+    <nz-icon nzType="plus" aria-hidden="true" /> New role
   </button>
 </div>
 
@@ -22,8 +22,8 @@
           }
         </td>
         <td class="actions-col">
-          <button nz-button nzType="text" nzSize="small" (click)="openEdit(role)">
-            <nz-icon nzType="edit" /> Edit
+          <button nz-button nzType="text" nzSize="small" [attr.aria-label]="'Edit role ' + role.name" (click)="openEdit(role)">
+            <nz-icon nzType="edit" aria-hidden="true" /> Edit
           </button>
           <button
             nz-button
@@ -32,11 +32,12 @@
             nzSize="small"
             [disabled]="isProtected(role)"
             [title]="isProtected(role) ? 'Built-in roles cannot be deleted' : ''"
+            [attr.aria-label]="isProtected(role) ? 'Delete role ' + role.name + ' (built-in roles cannot be deleted)' : 'Delete role ' + role.name"
             nz-popconfirm
             nzPopconfirmTitle="Delete this role?"
             (nzOnConfirm)="deleteRole(role)"
           >
-            <nz-icon nzType="delete" /> Delete
+            <nz-icon nzType="delete" aria-hidden="true" /> Delete
           </button>
         </td>
       </tr>
@@ -54,11 +55,15 @@
     <form nz-form [formGroup]="form">
       <nz-form-item>
         <nz-form-control nzErrorTip="Name is required">
+          <label class="sr-only" for="role-name">Role name</label>
           <input
+            id="role-name"
             nz-input
             formControlName="name"
             placeholder="Role name"
             [readonly]="editingIsProtected()"
+            [attr.aria-readonly]="editingIsProtected() ? true : null"
+            [attr.aria-invalid]="form.controls.name.invalid && form.controls.name.touched ? true : null"
           />
         </nz-form-control>
       </nz-form-item>
@@ -66,6 +71,7 @@
     <nz-select
       style="width: 100%"
       nzMode="multiple"
+      aria-label="Permissions for this role"
       nzPlaceHolder="Select permissions"
       [ngModel]="selectedPermissionIds()"
       (ngModelChange)="selectedPermissionIds.set($event)"

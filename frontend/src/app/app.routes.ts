@@ -6,6 +6,7 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: '/files' },
   {
     path: 'login',
+    title: 'Login - AnzenFS',
     loadComponent: () => import('./pages/login/login').then((m) => m.Login),
   },
   {

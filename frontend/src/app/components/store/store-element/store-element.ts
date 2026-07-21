@@ -1,5 +1,4 @@
 import {ChangeDetectorRef, Component, inject, Input, OnChanges, OnDestroy, output, SimpleChanges} from '@angular/core';
-import {DomSanitizer, SafeResourceUrl} from '@angular/platform-browser';
 import {FileNode, FileType, StoreService} from '../../../services/store';
 import {NzCardComponent, NzCardMetaComponent} from 'ng-zorro-antd/card';
 import {NzButtonModule} from 'ng-zorro-antd/button';
@@ -9,20 +8,24 @@ import {formatBytes} from '../../../shared/format';
 import {TransferRateEstimator} from '../../../shared/transfer-rate-estimator';
 import {TransferService} from '../../../services/transfer';
 
-type PreviewKind = 'image' | 'pdf' | 'icon';
+type PreviewKind = 'image' | 'icon';
 
 /**
  * Which widget renders a file's preview, keyed by its classified type. Video resolves
  * to 'image' too: the backend serves a generated thumbnail frame for video through the
  * same preview endpoint, so from here it's indistinguishable from a still image.
  * Adding preview support for a new type is a one-line change here.
+ *
+ * PDFs intentionally fall back to the icon: rendering a PDF in an <iframe> is not
+ * accessible (no text alternative, unusable with a screen reader or keyboard-only, no
+ * reflow), so no live preview is offered for that type.
  */
 const PREVIEW_KIND: Record<FileType, PreviewKind> = {
   FOLDER: 'icon',
   IMAGE: 'image',
   VIDEO: 'image',
   AUDIO: 'icon',
-  PDF: 'pdf',
+  PDF: 'icon',
   DOCUMENT: 'icon',
   ARCHIVE: 'icon',
   TEXT: 'icon',
@@ -58,7 +61,6 @@ export class StoreElement implements OnChanges, OnDestroy {
   private storeService = inject(StoreService);
   private transferService = inject(TransferService);
   private cdr = inject(ChangeDetectorRef);
-  private sanitizer = inject(DomSanitizer);
   isDownloading = false;
   protected previewFailed = false;
   protected previewObjectUrl: string | null = null;
@@ -107,6 +109,15 @@ export class StoreElement implements OnChanges, OnDestroy {
     }
   }
 
+  onCardKeydown(event: KeyboardEvent): void {
+    if (this.data.type !== 'FOLDER') return;
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.open();
+    }
+  }
+
   download() {
     this.isDownloading = true;
 
@@ -148,15 +159,6 @@ export class StoreElement implements OnChanges, OnDestroy {
 
   get previewKind(): PreviewKind {
     return PREVIEW_KIND[this.data.type];
-  }
-
-  /**
-   * `iframe[src]` is a RESOURCE_URL security context in Angular, so it must be explicitly
-   * trusted rather than bound as a plain string. Safe here: the URL is always a blob: URL
-   * created locally from the fetched preview, never from user-supplied input.
-   */
-  get trustedPreviewUrl(): SafeResourceUrl | null {
-    return this.previewObjectUrl ? this.sanitizer.bypassSecurityTrustResourceUrl(this.previewObjectUrl) : null;
   }
 
   get fallbackIcon(): string {

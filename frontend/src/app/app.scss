@@ -16,11 +16,30 @@
   box-shadow: 2px 0 6px rgba(0, 21, 41, 0.35);
 }
 
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: -9999px;
+  z-index: 10000;
+  padding: 12px 20px;
+  background: #fff;
+  color: #001529;
+  border-radius: 0 0 4px 0;
+
+  &:focus {
+    left: 0;
+  }
+}
+
 .header-trigger {
   height: 64px;
   padding: 20px 24px;
   font-size: 20px;
   cursor: pointer;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   transition:
     all 0.3s,
     padding 0s;
@@ -47,7 +66,7 @@
   vertical-align: middle;
 }
 
-.sidebar-logo h1 {
+.sidebar-logo .app-name {
   display: inline-block;
   margin: 0 0 0 20px;
   color: #fff;

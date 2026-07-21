@@ -76,12 +76,10 @@ describe('StoreElement', () => {
       expect(component.previewKind).toBe('image');
     });
 
-    it('resolves PDF to the pdf preview kind', () => {
+    it('resolves everything else, including PDF, to the icon preview kind', () => {
       fixture.componentRef.setInput('data', pdfNode);
-      expect(component.previewKind).toBe('pdf');
-    });
+      expect(component.previewKind).toBe('icon');
 
-    it('resolves everything else to the icon preview kind', () => {
       fixture.componentRef.setInput('data', textNode);
       expect(component.previewKind).toBe('icon');
 
@@ -136,17 +134,13 @@ describe('StoreElement', () => {
       expect(createObjectURLSpy).toHaveBeenCalled();
     });
 
-    it('produces a sanitizer-trusted resource url for iframe use once the blob resolves', () => {
+    it('does not fetch a preview for non-previewable types, including PDF', () => {
       fixture.componentRef.setInput('data', pdfNode);
       fixture.detectChanges();
+      expect(storeServiceStub.getPreview).not.toHaveBeenCalled();
 
-      expect(component.trustedPreviewUrl).toBeTruthy();
-    });
-
-    it('does not fetch a preview for non-previewable types', () => {
       fixture.componentRef.setInput('data', textNode);
       fixture.detectChanges();
-
       expect(storeServiceStub.getPreview).not.toHaveBeenCalled();
     });
   });
@@ -162,16 +156,14 @@ describe('StoreElement', () => {
       expect(img?.getAttribute('src')).toBe('blob:mock-1');
     });
 
-    it('renders an <iframe> for the pdf preview kind', async () => {
+    it('renders a fallback icon for non-previewable types, including PDF', async () => {
       fixture.componentRef.setInput('data', pdfNode);
       await fixture.whenStable();
       fixture.detectChanges();
 
-      const iframe = (fixture.nativeElement as HTMLElement).querySelector('iframe.preview-pdf');
-      expect(iframe).toBeTruthy();
-    });
+      expect((fixture.nativeElement as HTMLElement).querySelector('.file-icon-placeholder')).toBeTruthy();
+      expect((fixture.nativeElement as HTMLElement).querySelector('iframe')).toBeNull();
 
-    it('renders a fallback icon for non-previewable types', async () => {
       fixture.componentRef.setInput('data', textNode);
       await fixture.whenStable();
       fixture.detectChanges();

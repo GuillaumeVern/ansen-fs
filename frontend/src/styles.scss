@@ -1,1 +1,15 @@
 /* You can add global styles to this file, and also import other style files */
+
+/** Hides content visually while keeping it in the accessibility tree, for text that only
+ * screen reader users need (e.g. form labels kept out of a placeholder-only visual design). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

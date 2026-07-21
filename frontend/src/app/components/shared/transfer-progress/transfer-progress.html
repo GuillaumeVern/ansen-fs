@@ -1,4 +1,4 @@
-<div class="transfer-progress">
+<div class="transfer-progress" role="status" aria-live="polite">
   @if (title) {
     <p class="transfer-title">{{ title }}</p>
   }
@@ -10,7 +10,12 @@
         <span>{{ formatDuration(batch.etaSeconds) }} left</span>
       }
     </div>
-    <div class="progress-bar-track">
+    <div class="progress-bar-track"
+         role="progressbar"
+         aria-label="Overall progress"
+         [attr.aria-valuenow]="batchPercent"
+         aria-valuemin="0"
+         aria-valuemax="100">
       <div class="progress-bar-fill" [style.width.%]="batchPercent"></div>
     </div>
   }
@@ -19,7 +24,12 @@
     <span class="file-name" [title]="fileName">{{ fileName }}</span>
     <span>{{ formatBytes(loaded) }} / {{ formatBytes(total) }}</span>
   </div>
-  <div class="progress-bar-track">
+  <div class="progress-bar-track"
+       role="progressbar"
+       [attr.aria-label]="fileName"
+       [attr.aria-valuenow]="filePercent"
+       aria-valuemin="0"
+       aria-valuemax="100">
     <div class="progress-bar-fill" [style.width.%]="filePercent"></div>
   </div>
   @if (etaSeconds !== null) {

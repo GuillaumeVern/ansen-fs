@@ -87,6 +87,10 @@ export class Upload {
     this.isDraggingOver = false;
   }
 
+  onEscapeKey(): void {
+    this.isDraggingOver = false;
+  }
+
   private traverseFileTree(entry: any, path: string): Promise<File[]> {
     return new Promise((resolve, reject) => {
       if (entry.isFile) {

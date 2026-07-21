@@ -1,3 +1,5 @@
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
 <nz-layout class="app-layout">
   <nz-sider
     class="menu-sidebar"
@@ -8,41 +10,46 @@
     [nzTrigger]="null"
   >
     <div class="sidebar-logo">
-      <a href="https://ng.ant.design/" target="_blank">
-        <img src="https://ng.ant.design/assets/img/logo.svg" alt="logo" />
-        <h1>Ant Design of Angular</h1>
+      <a href="https://ng.ant.design/" target="_blank" rel="noopener" aria-label="Ant Design of Angular — opens in a new tab">
+        <img src="https://ng.ant.design/assets/img/logo.svg" alt="" />
+        <p class="app-name">Ant Design of Angular</p>
       </a>
     </div>
-    <ul nz-menu nzTheme="dark" nzMode="inline" [nzInlineCollapsed]="isCollapsed">
-      <ul>
-        <li nz-menu-item nzMatchRouter>
-          <nz-icon nzType="folder"/>
-          <a routerLink="/files"> Files</a>
-        </li>
-        @if (authService.isAdmin()) {
+    <nav aria-label="Main navigation">
+      <ul nz-menu nzTheme="dark" nzMode="inline" [nzInlineCollapsed]="isCollapsed">
+        <ul>
           <li nz-menu-item nzMatchRouter>
-            <nz-icon nzType="team"/>
-            <a routerLink="/admin"> Admin</a>
+            <nz-icon nzType="folder" aria-hidden="true"/>
+            <a routerLink="/files"> Files</a>
           </li>
-        }
+          @if (authService.isAdmin()) {
+            <li nz-menu-item nzMatchRouter>
+              <nz-icon nzType="team" aria-hidden="true"/>
+              <a routerLink="/admin"> Admin</a>
+            </li>
+          }
+        </ul>
       </ul>
-    </ul>
+    </nav>
   </nz-sider>
   <nz-layout>
     <nz-header>
       <div class="app-header">
-        <span class="header-trigger" (click)="isCollapsed = !isCollapsed">
-          <nz-icon class="trigger" [nzType]="isCollapsed ? 'menu-unfold' : 'menu-fold'" />
-        </span>
+        <button type="button" class="header-trigger"
+                (click)="isCollapsed = !isCollapsed"
+                [attr.aria-expanded]="!isCollapsed"
+                aria-label="Toggle navigation menu">
+          <nz-icon class="trigger" [nzType]="isCollapsed ? 'menu-unfold' : 'menu-fold'" aria-hidden="true" />
+        </button>
         @if (authService.isAuthenticated()) {
           <button nz-button nzType="text" (click)="logout()">Log out</button>
         }
       </div>
     </nz-header>
     <nz-content>
-      <div class="inner-content">
+      <main id="main-content" tabindex="-1" class="inner-content">
         <router-outlet></router-outlet>
-      </div>
+      </main>
     </nz-content>
   </nz-layout>
 </nz-layout>
