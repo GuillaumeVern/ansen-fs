@@ -43,12 +43,12 @@ describe('AuthService', () => {
 
   it('starts unauthenticated when no token is stored', () => {
     expect(service.isAuthenticated()).toBe(false);
-    expect(service.token()).toBeNull();
-    expect(service.currentUser()).toBeNull();
+    expect(service.token).toBeNull();
+    expect(service.currentUser).toBeNull();
     expect(service.isAdmin()).toBe(false);
   });
 
-  it('picks up a pre-existing token from localStorage and loads the current user', async () => {
+  it('picks up a pre-existing token from localStorage without fetching the user until init() runs', () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, 'preexisting-token');
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -56,14 +56,55 @@ describe('AuthService', () => {
     });
 
     const fresh = TestBed.inject(AuthService);
-    const freshHttpMock = TestBed.inject(HttpTestingController);
-    expect(fresh.token()).toBe('preexisting-token');
+    expect(fresh.token).toBe('preexisting-token');
+    expect(fresh.currentUser).toBeNull();
 
-    freshHttpMock.expectOne('/api/auth/me').flush(plainUserSummary);
-    await Promise.resolve();
+    TestBed.inject(HttpTestingController).verify();
+  });
 
-    expect(fresh.currentUser()).toEqual(plainUserSummary);
-    freshHttpMock.verify();
+  describe('init', () => {
+    it('loads the current user when a token is already present', async () => {
+      localStorage.setItem(TOKEN_STORAGE_KEY, 'preexisting-token');
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [provideHttpClient(), provideHttpClientTesting()],
+      });
+
+      const fresh = TestBed.inject(AuthService);
+      const freshHttpMock = TestBed.inject(HttpTestingController);
+
+      const initPromise = fresh.init();
+      freshHttpMock.expectOne('/api/auth/me').flush(adminSummary);
+      await initPromise;
+
+      expect(fresh.currentUser).toEqual(adminSummary);
+      expect(fresh.isAdmin()).toBe(true);
+      freshHttpMock.verify();
+    });
+
+    it('does nothing when there is no token', async () => {
+      await service.init();
+      expect(service.currentUser).toBeNull();
+    });
+
+    it('clears currentUser when the request fails', async () => {
+      localStorage.setItem(TOKEN_STORAGE_KEY, 'preexisting-token');
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [provideHttpClient(), provideHttpClientTesting()],
+      });
+
+      const fresh = TestBed.inject(AuthService);
+      const freshHttpMock = TestBed.inject(HttpTestingController);
+
+      const initPromise = fresh.init();
+      freshHttpMock.expectOne('/api/auth/me').flush('boom', { status: 500, statusText: 'Server Error' });
+      await initPromise;
+
+      expect(fresh.currentUser).toBeNull();
+      expect(fresh.isAdmin()).toBe(false);
+      freshHttpMock.verify();
+    });
   });
 
   it('login stores the token, loads the current user, and flips isAuthenticated', async () => {
@@ -80,11 +121,11 @@ describe('AuthService', () => {
 
     await loginPromise;
 
-    expect(service.token()).toBe('new-token');
+    expect(service.token).toBe('new-token');
     expect(service.isAuthenticated()).toBe(true);
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('new-token');
     expect(resetSpy).toHaveBeenCalled();
-    expect(service.currentUser()).toEqual(adminSummary);
+    expect(service.currentUser).toEqual(adminSummary);
     expect(service.isAdmin()).toBe(true);
   });
 
@@ -97,7 +138,7 @@ describe('AuthService', () => {
     await expect(loginPromise).rejects.toBeTruthy();
     expect(service.isAuthenticated()).toBe(false);
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
-    expect(service.currentUser()).toBeNull();
+    expect(service.currentUser).toBeNull();
   });
 
   it('logout clears the token, current user, and resets store state', async () => {
@@ -111,29 +152,9 @@ describe('AuthService', () => {
     service.logout();
 
     expect(service.isAuthenticated()).toBe(false);
-    expect(service.token()).toBeNull();
-    expect(service.currentUser()).toBeNull();
+    expect(service.token).toBeNull();
+    expect(service.currentUser).toBeNull();
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
     expect(resetSpy).toHaveBeenCalled();
-  });
-
-  describe('loadCurrentUser', () => {
-    it('sets currentUser on success', async () => {
-      const promise = service.loadCurrentUser();
-      httpMock.expectOne('/api/auth/me').flush(adminSummary);
-      await promise;
-
-      expect(service.currentUser()).toEqual(adminSummary);
-      expect(service.isAdmin()).toBe(true);
-    });
-
-    it('clears currentUser when the request fails', async () => {
-      const promise = service.loadCurrentUser();
-      httpMock.expectOne('/api/auth/me').flush('boom', { status: 500, statusText: 'Server Error' });
-      await promise;
-
-      expect(service.currentUser()).toBeNull();
-      expect(service.isAdmin()).toBe(false);
-    });
   });
 });

@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzFormModule } from 'ng-zorro-antd/form';
@@ -38,7 +38,6 @@ export class UsersPanel implements OnInit {
 
   protected users = this.adminService.users;
   protected roles = this.adminService.roles;
-  protected currentUserId = computed(() => this.authService.currentUser()?.id);
 
   protected showCreateModal = signal(false);
   protected createForm = this.fb.nonNullable.group({
@@ -58,6 +57,10 @@ export class UsersPanel implements OnInit {
     if (this.roles().length === 0) {
       await this.adminService.loadRoles();
     }
+  }
+
+  protected currentUserId(): number | undefined {
+    return this.authService.currentUser?.id;
   }
 
   openCreateModal(): void {

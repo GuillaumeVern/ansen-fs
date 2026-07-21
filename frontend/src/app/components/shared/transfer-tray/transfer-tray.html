@@ -1,0 +1,22 @@
+@if (transferService.upload(); as upload) {
+  <div class="transfer-card">
+    <app-transfer-progress
+      title="Uploading"
+      [fileName]="upload.currentFileName"
+      [loaded]="upload.currentFileLoaded"
+      [total]="upload.currentFileTotal"
+      [etaSeconds]="upload.currentFileEtaSeconds"
+      [batch]="uploadBatch(upload)" />
+  </div>
+}
+
+@for (download of transferService.downloads(); track download.id) {
+  <div class="transfer-card">
+    <app-transfer-progress
+      title="Downloading"
+      [fileName]="download.fileName"
+      [loaded]="download.loaded"
+      [total]="download.total"
+      [etaSeconds]="download.etaSeconds" />
+  </div>
+}

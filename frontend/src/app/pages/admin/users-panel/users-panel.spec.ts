@@ -46,7 +46,7 @@ describe('UsersPanel', () => {
       updateUserPassword: vi.fn().mockResolvedValue(undefined),
       deleteUser: vi.fn().mockResolvedValue(undefined),
     };
-    const authServiceStub = { currentUser: () => ({ id: 1, username: 'admin', roles: [adminRole] }) };
+    const authServiceStub = { currentUser: { id: 1, username: 'admin', roles: [adminRole] } };
 
     await TestBed.configureTestingModule({
       imports: [UsersPanel],

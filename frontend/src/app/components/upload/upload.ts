@@ -1,9 +1,11 @@
-import { HttpClient } from '@angular/common/http';
+import {HttpClient, HttpEvent, HttpEventType} from '@angular/common/http';
 import {Component, ElementRef, inject, viewChild} from '@angular/core';
-import {concatMap, from} from 'rxjs';
+import {concatMap, from, tap} from 'rxjs';
 import {StoreService} from '../../services/store';
+import {TransferService} from '../../services/transfer';
 import {NzButtonModule} from 'ng-zorro-antd/button';
 import {NzIconModule} from 'ng-zorro-antd/icon';
+import {TransferRateEstimator} from '../../shared/transfer-rate-estimator';
 
 interface CreateJobRequest {
   parentUuid: string | null
@@ -28,6 +30,7 @@ export class Upload {
 
   private http = inject(HttpClient);
   protected storeService = inject(StoreService);
+  private transferService = inject(TransferService);
   protected isDraggingOver = false;
 
   onDragOver(event: DragEvent) {
@@ -155,32 +158,53 @@ export class Upload {
   }
 
   private uploadFiles(jobId: string, currentFolderUuid: string) {
-    let chunkSize = 3;
-    let allFiles = [...this.selectedFiles];
-    let chunks: File[][] = [];
+    const files = [...this.selectedFiles];
 
-    while (allFiles.length > 0) {
-      chunks.push(allFiles.splice(0, chunkSize));
-    }
+    this.transferService.startUpload(files.length);
 
-    from(chunks).pipe(
-      concatMap((chunk) => {
+    const overallTotalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    let bytesBeforeCurrentFile = 0;
+    const overallEstimator = new TransferRateEstimator();
+
+    from(files).pipe(
+      concatMap((file) => {
+        const fileName = file.webkitRelativePath || file.name;
+        this.transferService.startUploadFile(fileName, file.size);
+        const fileEstimator = new TransferRateEstimator();
+
         const formData = new FormData();
-        chunk.forEach(file => formData.append('files', file));
+        formData.append('files', file);
         formData.append('parentUuid', currentFolderUuid || '');
 
-        chunk.forEach((file) => {
-          console.log("uploading: " + file.webkitRelativePath);
-        })
-        return this.http.post(`api/files/jobs/${jobId}/upload`, formData);
+        return this.http.post(`api/files/jobs/${jobId}/upload`, formData, {
+          reportProgress: true,
+          observe: 'events',
+        }).pipe(
+          tap((event: HttpEvent<any>) => {
+            if (event.type === HttpEventType.UploadProgress) {
+              const total = event.total ?? file.size;
+              const etaSeconds = fileEstimator.estimateSecondsRemaining(event.loaded, total);
+              const overallEtaSeconds = overallEstimator.estimateSecondsRemaining(
+                bytesBeforeCurrentFile + event.loaded,
+                overallTotalBytes,
+              );
+              this.transferService.updateUploadProgress(event.loaded, etaSeconds, overallEtaSeconds);
+            } else if (event.type === HttpEventType.Response) {
+              bytesBeforeCurrentFile += file.size;
+              this.transferService.completeUploadFile();
+            }
+          })
+        );
       })
     ).subscribe({
-      next: (response) => console.log('Chunk uploaded successfully:', response),
-      error: (err) => console.error('An error occurred during the sequence:', err),
+      error: (err) => {
+        console.error('An error occurred during the sequence:', err);
+        this.transferService.finishUpload();
+      },
       complete: () => {
-        console.log('All chunks have been uploaded!')
         this.selectedFiles = [];
         this.storeService.loadFiles(true);
+        this.transferService.finishUpload();
       }
     });
   }

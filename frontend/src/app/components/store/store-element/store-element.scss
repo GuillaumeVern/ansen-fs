@@ -33,25 +33,6 @@
   justify-content: flex-end;
 }
 
-.progress-overlay {
-  margin-top: 8px;
-  font-size: 12px;
-
-  .progress-bar-container {
-    width: 100%;
-    color: var(--ant-disabled-color, #b8b8b8);
-    border-radius: 2px;
-    height: 4px;
-    overflow: hidden;
-
-    .progress-bar {
-      height: 100%;
-      background-color: var(--ant-primary-color, #1890ff);
-      transition: width 0.1s linear;
-    }
-  }
-}
-
 nz-card {
   height: 100%;
   width: 100%;

@@ -1,0 +1,28 @@
+<div class="transfer-progress">
+  @if (title) {
+    <p class="transfer-title">{{ title }}</p>
+  }
+
+  @if (batch) {
+    <div class="transfer-row">
+      <span>{{ currentFileNumber }} / {{ batch.totalFiles }} files</span>
+      @if (batch.etaSeconds !== null) {
+        <span>{{ formatDuration(batch.etaSeconds) }} left</span>
+      }
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" [style.width.%]="batchPercent"></div>
+    </div>
+  }
+
+  <div class="transfer-row">
+    <span class="file-name" [title]="fileName">{{ fileName }}</span>
+    <span>{{ formatBytes(loaded) }} / {{ formatBytes(total) }}</span>
+  </div>
+  <div class="progress-bar-track">
+    <div class="progress-bar-fill" [style.width.%]="filePercent"></div>
+  </div>
+  @if (etaSeconds !== null) {
+    <p class="eta">{{ formatDuration(etaSeconds) }} remaining</p>
+  }
+</div>

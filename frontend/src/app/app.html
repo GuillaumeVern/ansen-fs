@@ -19,7 +19,7 @@
           <nz-icon nzType="folder"/>
           <a routerLink="/files"> Files</a>
         </li>
-        @if (isAdmin()) {
+        @if (authService.isAdmin()) {
           <li nz-menu-item nzMatchRouter>
             <nz-icon nzType="team"/>
             <a routerLink="/admin"> Admin</a>
@@ -34,7 +34,7 @@
         <span class="header-trigger" (click)="isCollapsed = !isCollapsed">
           <nz-icon class="trigger" [nzType]="isCollapsed ? 'menu-unfold' : 'menu-fold'" />
         </span>
-        @if (isAuthenticated()) {
+        @if (authService.isAuthenticated()) {
           <button nz-button nzType="text" (click)="logout()">Log out</button>
         }
       </div>
@@ -46,3 +46,5 @@
     </nz-content>
   </nz-layout>
 </nz-layout>
+
+<app-transfer-tray />

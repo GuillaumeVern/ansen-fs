@@ -5,6 +5,9 @@ import {NzCardComponent, NzCardMetaComponent} from 'ng-zorro-antd/card';
 import {NzButtonModule} from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import {HttpEvent, HttpEventType} from '@angular/common/http';
+import {formatBytes} from '../../../shared/format';
+import {TransferRateEstimator} from '../../../shared/transfer-rate-estimator';
+import {TransferService} from '../../../services/transfer';
 
 type PreviewKind = 'image' | 'pdf' | 'icon';
 
@@ -39,18 +42,6 @@ const TYPE_ICON: Record<FileType, string> = {
   OTHER: 'file',
 };
 
-const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
-
-/** Renders a byte count as a human-readable size, e.g. `1.5 MB` rather than `1572864 bytes`. */
-function formatBytes(bytes: number): string {
-  if (!bytes) return '0 B';
-
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), SIZE_UNITS.length - 1);
-  const value = bytes / Math.pow(1024, exponent);
-
-  return `${exponent === 0 ? value : value.toFixed(1)} ${SIZE_UNITS[exponent]}`;
-}
-
 @Component({
   selector: 'app-store-element',
   imports: [
@@ -65,10 +56,10 @@ function formatBytes(bytes: number): string {
 export class StoreElement implements OnChanges, OnDestroy {
   @Input({ required: true }) data!: FileNode;
   private storeService = inject(StoreService);
+  private transferService = inject(TransferService);
   private cdr = inject(ChangeDetectorRef);
   private sanitizer = inject(DomSanitizer);
   isDownloading = false;
-  progress = 0;
   protected previewFailed = false;
   protected previewObjectUrl: string | null = null;
   public delete = output<string>();
@@ -118,15 +109,15 @@ export class StoreElement implements OnChanges, OnDestroy {
 
   download() {
     this.isDownloading = true;
-    this.progress = 0;
+
+    const estimator = new TransferRateEstimator();
+    this.transferService.startDownload(this.data.uuid, this.data.name);
 
     this.storeService.downloadFile(this.data.uuid).subscribe({
       next: (event: HttpEvent<Blob>) => {
         if (event.type === HttpEventType.DownloadProgress) {
-          if (event.total) {
-            this.progress = Math.round((100 * event.loaded) / event.total);
-            this.cdr.detectChanges();
-          }
+          const etaSeconds = event.total ? estimator.estimateSecondsRemaining(event.loaded, event.total) : null;
+          this.transferService.updateDownload(this.data.uuid, event.loaded, event.total ?? 0, etaSeconds);
         }
 
         else if (event.type === HttpEventType.Response) {
@@ -142,12 +133,14 @@ export class StoreElement implements OnChanges, OnDestroy {
             window.URL.revokeObjectURL(blobUrl);
           }
           this.isDownloading = false;
+          this.transferService.finishDownload(this.data.uuid);
           this.cdr.detectChanges();
         }
       },
       error: (err) => {
         console.error('Download error:', err);
         this.isDownloading = false;
+        this.transferService.finishDownload(this.data.uuid);
         this.cdr.detectChanges();
       }
     });

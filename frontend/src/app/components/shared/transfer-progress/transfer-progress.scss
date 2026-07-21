@@ -1,0 +1,41 @@
+:host {
+  display: block;
+  font-size: 12px;
+}
+
+.transfer-title {
+  margin: 0 0 4px;
+  font-weight: 500;
+}
+
+.transfer-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ant-text-color-secondary, #00000073);
+
+  .file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.progress-bar-track {
+  width: 100%;
+  background-color: var(--ant-border-color-split, #f0f0f0);
+  border-radius: 2px;
+  height: 4px;
+  overflow: hidden;
+  margin: 2px 0 6px;
+
+  .progress-bar-fill {
+    height: 100%;
+    background-color: var(--ant-primary-color, #1890ff);
+    transition: width 0.1s linear;
+  }
+}
+
+.eta {
+  margin: 0;
+}

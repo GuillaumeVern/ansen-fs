@@ -1,17 +1,19 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpEventType, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideNzIcons } from 'ng-zorro-antd/icon';
 import { vi } from 'vitest';
 
 import { Upload } from './upload';
 import { StoreService } from '../../services/store';
+import { TransferService } from '../../services/transfer';
 import { icons } from '../../icons-provider';
 
 describe('Upload', () => {
   let component: Upload;
   let fixture: ComponentFixture<Upload>;
   let httpMock: HttpTestingController;
+  let transferService: TransferService;
   let storeServiceStub: { currentParentUuid: () => string; loadFiles: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
@@ -33,6 +35,7 @@ describe('Upload', () => {
     fixture = TestBed.createComponent(Upload);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
+    transferService = TestBed.inject(TransferService);
     await fixture.whenStable();
   });
 
@@ -85,7 +88,7 @@ describe('Upload', () => {
     httpMock.expectNone((r) => r.url === '/api/files/jobs/new');
   });
 
-  it('uploadItems posts a manifest, uploads files in chunks, then refreshes the listing', async () => {
+  it('uploadItems posts a manifest, uploads files one by one, then refreshes the listing', async () => {
     const files = [1, 2, 3, 4].map((i) => new File([`data${i}`], `f${i}.txt`));
     component.selectedFiles = files;
 
@@ -99,15 +102,44 @@ describe('Upload', () => {
     });
     jobReq.flush({ jobId: 'job-1' });
 
-    const chunk1 = httpMock.expectOne('api/files/jobs/job-1/upload');
-    chunk1.flush({});
-    const chunk2 = httpMock.expectOne('api/files/jobs/job-1/upload');
-    chunk2.flush({});
+    for (let i = 0; i < 4; i++) {
+      const req = httpMock.expectOne('api/files/jobs/job-1/upload');
+      req.flush({});
+    }
 
     await fixture.whenStable();
 
     expect(component.selectedFiles).toEqual([]);
     expect(storeServiceStub.loadFiles).toHaveBeenCalledWith(true);
+  });
+
+  it('tracks per-file and overall progress while uploading a folder', async () => {
+    const files = [1, 2].map((i) => new File([`data${i}`], `f${i}.txt`));
+    component.selectedFiles = files;
+
+    component.uploadItems();
+
+    const jobReq = httpMock.expectOne('/api/files/jobs/new');
+    jobReq.flush({ jobId: 'job-1' });
+
+    const req1 = httpMock.expectOne('api/files/jobs/job-1/upload');
+    req1.event({ type: HttpEventType.UploadProgress, loaded: 3, total: 5 } as any);
+    expect(transferService.upload()).toMatchObject({
+      currentFileName: 'f1.txt',
+      currentFileLoaded: 3,
+      currentFileTotal: 5,
+      filesDone: 0,
+      totalFiles: 2,
+    });
+    req1.flush({});
+    expect(transferService.upload()?.filesDone).toBe(1);
+
+    const req2 = httpMock.expectOne('api/files/jobs/job-1/upload');
+    req2.flush({});
+
+    await fixture.whenStable();
+
+    expect(transferService.upload()).toBeNull();
   });
 
   it('triggerFileInput clicks the hidden file input', () => {

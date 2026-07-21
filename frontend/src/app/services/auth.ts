@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { StoreService } from './store';
 import { UserSummary } from '../models/rbac';
@@ -11,24 +11,34 @@ interface AuthResponse {
 const TOKEN_STORAGE_KEY = 'anzenfs.token';
 const ADMIN_ROLE_NAME = 'ADMIN';
 
+/**
+ * Plain fields, no signals: the user is loaded exactly once, at app startup, by `init()`
+ * (see the app initializer in app.config.ts) before the router ever runs a guard. That's the
+ * only place the current user is fetched, so there's no concurrent/duplicate request and no
+ * ordering race to reason about - the previous signal-based version had two independent call
+ * sites (a constructor fire-and-forget call and a guard-triggered call) that could race and
+ * silently revoke admin access after the page had already rendered.
+ */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private http = inject(HttpClient);
   private storeService = inject(StoreService);
 
-  private tokenSignal = signal<string | null>(localStorage.getItem(TOKEN_STORAGE_KEY));
-  public token = this.tokenSignal.asReadonly();
-  public isAuthenticated = computed(() => !!this.tokenSignal());
+  token: string | null = localStorage.getItem(TOKEN_STORAGE_KEY);
+  currentUser: UserSummary | null = null;
 
-  private currentUserSignal = signal<UserSummary | null>(null);
-  public currentUser = this.currentUserSignal.asReadonly();
-  public isAdmin = computed(() =>
-    this.currentUserSignal()?.roles.some((role) => role.name === ADMIN_ROLE_NAME) ?? false,
-  );
+  isAuthenticated(): boolean {
+    return !!this.token;
+  }
 
-  constructor() {
-    if (this.tokenSignal()) {
-      this.loadCurrentUser();
+  isAdmin(): boolean {
+    return this.currentUser?.roles.some((role) => role.name === ADMIN_ROLE_NAME) ?? false;
+  }
+
+  /** Called once from the app initializer, before routing starts. */
+  async init(): Promise<void> {
+    if (this.token) {
+      await this.loadCurrentUser();
     }
   }
 
@@ -38,24 +48,23 @@ export class AuthService {
     );
 
     this.storeService.reset();
-    this.tokenSignal.set(response.token);
+    this.token = response.token;
     localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
     await this.loadCurrentUser();
   }
 
   logout(): void {
     this.storeService.reset();
-    this.tokenSignal.set(null);
-    this.currentUserSignal.set(null);
+    this.token = null;
+    this.currentUser = null;
     localStorage.removeItem(TOKEN_STORAGE_KEY);
   }
 
-  async loadCurrentUser(): Promise<void> {
+  private async loadCurrentUser(): Promise<void> {
     try {
-      const user = await firstValueFrom(this.http.get<UserSummary>('/api/auth/me'));
-      this.currentUserSignal.set(user);
+      this.currentUser = await firstValueFrom(this.http.get<UserSummary>('/api/auth/me'));
     } catch {
-      this.currentUserSignal.set(null);
+      this.currentUser = null;
     }
   }
 }

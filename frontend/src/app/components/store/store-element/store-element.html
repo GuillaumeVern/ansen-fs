@@ -6,7 +6,9 @@
                 [nzDescription]="displaySize" />
 
   <div class="card-actions">
-    <button nz-button nzType="primary" nzSize="small" nzShape="circle" (click)="download(); $event.stopPropagation()">
+    <button nz-button nzType="primary" nzSize="small" nzShape="circle"
+            [nzLoading]="isDownloading"
+            (click)="download(); $event.stopPropagation()">
       <nz-icon nzType="download" />
     </button>
 
@@ -20,15 +22,6 @@
       <nz-icon nzType="delete" />
     </button>
   </div>
-
-  @if (isDownloading) {
-    <div class="progress-overlay" (click)="$event.stopPropagation()">
-      <p>Downloading... {{ progress }}%</p>
-      <div class="progress-bar-container">
-        <div class="progress-bar" [style.width.%]="progress"></div>
-      </div>
-    </div>
-  }
 </nz-card>
 
 <ng-template #coverTemplate>
