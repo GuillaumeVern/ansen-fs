@@ -24,7 +24,7 @@ custom version or contribute to the project.
 ### Native binary (recommended for production)
 
 ```
-mvn clean package -Pnative native:compile
+./mvnw clean package -Pnative native:compile
 ```
 
 Produces a self-contained executable at `target/anzenfs`, with no dependency on a JVM installed
@@ -33,8 +33,8 @@ on the target machine.
 ### Classic JAR (development)
 
 ```
-mvn clean package
-mvn spring-boot:run
+./mvnw clean package
+./mvnw spring-boot:run
 ```
 
 ## Configuration
@@ -114,6 +114,8 @@ username and password, then submit. Invalid credentials show an error message; a
 consecutive failed attempts on the same account within one minute, further attempts are
 temporarily blocked (brute-force protection).
 
+![sign in page](screenshots/login.png)
+
 ### Browsing and managing files
 
 The **Files** page shows the contents of the current folder as a grid of cards (one file or
@@ -127,10 +129,15 @@ picker.
 Each card offers two actions: **download** and **delete** (deleting asks for confirmation first;
 deleting a folder removes all of its contents).
 
+![browsing files](screenshots/files.png)
+![drag and drop](screenshots/drag_and_drop.png)
+
 ### Transfer tracking
 
 A transfer tray appears at the bottom of the screen while uploads and downloads are in progress,
 showing a progress bar and an estimated time remaining for each.
+
+![Transferring files](screenshots/transfers.png)
 
 ### Previews
 
@@ -153,6 +160,10 @@ tabs:
 - **Permissions**: create or delete the permissions available (e.g. `READ`, `WRITE`) for
   composing roles.
 
+  ![admin panel - users](screenshots/admin-users.png)
+  ![admin panel - roles](screenshots/admin-roles.png)
+  ![admin panel - permissions](screenshots/admin-permissions.png)
+
 ## Updating
 
 The recommended way to update a running instance is to download the latest precompiled binary
@@ -163,7 +174,7 @@ Instances built from source can instead be updated by rebuilding:
 
 ```
 git pull
-mvn clean package -Pnative native:compile
+./mvnw clean package -Pnative native:compile
 ```
 
 Then replace the binary on the server and restart the service, as above.
