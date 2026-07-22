@@ -4,7 +4,8 @@ pipeline {
     agent any
     
     tools {
-        jdk 'graalvmce-25.0.2' 
+        jdk 'graalvmce-25.0.2'
+        nodejs 'nodejs-22'
     }
     
     environment {
