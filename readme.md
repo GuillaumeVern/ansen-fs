@@ -45,6 +45,11 @@ No secrets need to be provided manually at startup:
 - **JWT secret**: generated randomly (512 bits) on first startup and persisted in that same
   directory with owner-only permissions (`chmod 600`); see `JwtSecretStore`. It is never
   committed to version control.
+- **Initial admin password**: the built-in `admin` account is created on first startup with a
+  randomly generated password (144 bits), persisted the same way as the JWT secret (owner-only
+  permissions, in the application data directory, under `admin.initial-password`); see
+  `AdminPasswordStore`. Retrieve it from that file after the first startup, sign in as `admin`,
+  and change the password from the admin panel.
 
 The default data directory is `~/.local/share/anzenfs`. It can be overridden with the
 `XDG_DATA_HOME` environment variable (the directory used then becomes `$XDG_DATA_HOME/anzenfs`),
@@ -141,7 +146,9 @@ tabs:
 - **Users**: create an account (username and password, 8 characters minimum, with at least one
   letter and one digit), assign it roles, reset its password, or delete it. The built-in `admin`
   account cannot be deleted, and an administrator can neither delete their own account nor remove
-  their own `ADMIN` role.
+  their own `ADMIN` role. On a fresh deployment, sign in as `admin` with the generated initial
+  password (see the Configuration section above), then use **Reset password** on the `admin` row
+  to set a new one.
 - **Roles**: create, edit, or delete a role, and attach the desired permissions to it.
 - **Permissions**: create or delete the permissions available (e.g. `READ`, `WRITE`) for
   composing roles.

@@ -2,6 +2,7 @@ package com.losvernos.anzenfs;
 
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
+import org.springframework.aot.hint.annotation.RegisterReflectionForBinding;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ImportRuntimeHints;
@@ -9,6 +10,45 @@ import org.springframework.context.annotation.ImportRuntimeHints;
 import java.io.File;
 import java.io.IOException;
 
+import com.losvernos.anzenfs.files.FileNode;
+import com.losvernos.anzenfs.files.ResourceAndName;
+import com.losvernos.anzenfs.jobs.UploadJobCreationRequest;
+import com.losvernos.anzenfs.jobs.UploadJobSummary;
+import com.losvernos.anzenfs.rbac.auth.AuthResponse;
+import com.losvernos.anzenfs.rbac.auth.LoginRequest;
+import com.losvernos.anzenfs.rbac.permission.CreatePermissionRequest;
+import com.losvernos.anzenfs.rbac.permission.PermissionSummary;
+import com.losvernos.anzenfs.rbac.role.CreateRoleRequest;
+import com.losvernos.anzenfs.rbac.role.RoleSummary;
+import com.losvernos.anzenfs.rbac.role.UpdateRoleRequest;
+import com.losvernos.anzenfs.rbac.user.CreateUserRequest;
+import com.losvernos.anzenfs.rbac.user.GetUserRequest;
+import com.losvernos.anzenfs.rbac.user.UpdatePasswordRequest;
+import com.losvernos.anzenfs.rbac.user.UpdateUserRolesRequest;
+import com.losvernos.anzenfs.rbac.user.UserSummary;
+
+// Native image builds don't reflectively expose record accessors (needed by Jackson to
+// (de)serialize JSON bodies) unless explicitly registered - Spring's AOT engine doesn't always
+// pick every DTO up automatically. Registering all of them here once avoids hitting this the
+// same way on every other endpoint, one UnsupportedFeatureError at a time.
+@RegisterReflectionForBinding({
+    AuthResponse.class,
+    LoginRequest.class,
+    CreateUserRequest.class,
+    GetUserRequest.class,
+    UpdatePasswordRequest.class,
+    UpdateUserRolesRequest.class,
+    UserSummary.class,
+    CreateRoleRequest.class,
+    UpdateRoleRequest.class,
+    RoleSummary.class,
+    CreatePermissionRequest.class,
+    PermissionSummary.class,
+    UploadJobCreationRequest.class,
+    UploadJobSummary.class,
+    FileNode.class,
+    ResourceAndName.class
+})
 @ImportRuntimeHints(AnzenfsApplication.WebResourcesHints.class)
 @SpringBootApplication
 public class AnzenfsApplication {

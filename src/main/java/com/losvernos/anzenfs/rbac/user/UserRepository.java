@@ -12,6 +12,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -29,12 +32,19 @@ import com.losvernos.anzenfs.rbac.role.Role;
 @Service
 public class UserRepository {
 
+    private static final Logger log = LoggerFactory.getLogger(UserRepository.class);
+
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
+    private final String initialAdminPassword;
 
-    public UserRepository(JdbcTemplate jdbcTemplate, PasswordEncoder passwordEncoder) {
+    public UserRepository(
+            JdbcTemplate jdbcTemplate,
+            PasswordEncoder passwordEncoder,
+            @Qualifier("initialAdminPassword") String initialAdminPassword) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = passwordEncoder;
+        this.initialAdminPassword = initialAdminPassword;
     }
 
     private final RowMapper<User> userRowMapper = (rs, rowNum) -> {
@@ -283,7 +293,7 @@ public class UserRepository {
         if (null == adminInDatabase.getUsername()) {
             User adminAccount = User.builder()
                     .username("admin")
-                    .password("admin")
+                    .password(initialAdminPassword)
                     .userRoles(
                             List.of(
                                     Role.builder()
@@ -300,6 +310,10 @@ public class UserRepository {
                     .build();
 
             save(adminAccount);
+
+            log.warn("Created the built-in admin account with a generated initial password. "
+                    + "Retrieve it from the 'admin.initial-password' file in the application data directory, "
+                    + "log in as admin, and change it as soon as possible.");
         }
     }
 

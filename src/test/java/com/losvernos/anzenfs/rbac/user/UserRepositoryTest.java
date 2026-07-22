@@ -23,7 +23,7 @@ class UserRepositoryTest {
     @BeforeEach
     void setUp() {
         jdbcTemplate = TestDb.newJdbcTemplate();
-        userRepository = new UserRepository(jdbcTemplate, passwordEncoder);
+        userRepository = new UserRepository(jdbcTemplate, passwordEncoder, "test-initial-password1");
     }
 
     @Test
@@ -151,6 +151,15 @@ class UserRepositoryTest {
         Integer adminCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM users WHERE username = 'admin'", Integer.class);
         assertThat(adminCount).isEqualTo(1);
+    }
+
+    @Test
+    void initAdminAccountUsesTheInjectedInitialPasswordRatherThanAHardcodedDefault() {
+        userRepository.initAdminAccount();
+
+        String storedPassword = jdbcTemplate.queryForObject(
+                "SELECT password FROM users WHERE username = 'admin'", String.class);
+        assertThat(passwordEncoder.matches("test-initial-password1", storedPassword)).isTrue();
     }
 
     @Test
