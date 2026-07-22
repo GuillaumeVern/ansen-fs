@@ -71,6 +71,8 @@ public class UserService implements UserDetailsService {
 
   @Transactional
   public void registerNewUser(CreateUserRequest request) {
+    PasswordPolicy.validate(request.password());
+
     String customRoleName = request.username().toUpperCase() + "_ROLE";
 
     Role globalUserRole = roleRepository.findByName("USER_ROLE")
@@ -163,6 +165,7 @@ public class UserService implements UserDetailsService {
       return Optional.empty();
     }
 
+    PasswordPolicy.validate(newPassword);
     userRepository.updatePassword(id, passwordEncoder.encode(newPassword));
     return getUserSummary(id);
   }

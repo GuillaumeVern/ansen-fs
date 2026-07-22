@@ -2,6 +2,8 @@ package com.losvernos.anzenfs.security;
 
 import com.losvernos.anzenfs.rbac.role.Role;
 import com.losvernos.anzenfs.rbac.user.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -10,6 +12,8 @@ import java.util.List;
 
 @Component("fsSecurity")
 public class FileSystemSecurityEvaluator {
+
+    private static final Logger log = LoggerFactory.getLogger(FileSystemSecurityEvaluator.class);
 
     private record RoleGrant(int depth, long roleId, String level) {}
 
@@ -22,11 +26,13 @@ public class FileSystemSecurityEvaluator {
     public boolean hasAccess(String externalId, String requiredLevel) {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
+            log.warn("Access denied: no authenticated user (externalId={}, requiredLevel={})", externalId, requiredLevel);
             return false;
         }
 
         List<Role> userRoles = user.getUserRoles();
         if (userRoles == null || userRoles.isEmpty()) {
+            log.warn("Access denied: user={} has no roles (externalId={}, requiredLevel={})", user.getUsername(), externalId, requiredLevel);
             return false;
         }
 
@@ -60,6 +66,7 @@ public class FileSystemSecurityEvaluator {
         );
 
         if (grants.isEmpty()) {
+            log.warn("Access denied: user={} no grants found for externalId={} (requiredLevel={})", user.getUsername(), externalId, requiredLevel);
             return false;
         }
 
@@ -75,12 +82,19 @@ public class FileSystemSecurityEvaluator {
         boolean hasWritePermission = actualLevels.stream().anyMatch("WRITE"::equalsIgnoreCase);
         boolean hasReadPermission = actualLevels.stream().anyMatch("READ"::equalsIgnoreCase);
 
+        boolean granted;
         if ("WRITE".equalsIgnoreCase(requiredLevel)) {
-            return hasWritePermission;
+            granted = hasWritePermission;
         } else if ("READ".equalsIgnoreCase(requiredLevel)) {
-            return hasReadPermission || hasWritePermission;
+            granted = hasReadPermission || hasWritePermission;
+        } else {
+            granted = false;
         }
 
-        return false;
+        if (!granted) {
+            log.warn("Access denied: user={} lacks {} permission on externalId={}", user.getUsername(), requiredLevel, externalId);
+        }
+
+        return granted;
     }
 }

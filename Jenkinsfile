@@ -31,6 +31,61 @@ pipeline {
             }
         }
         
+        stage('Backend Tests & Quality Gate') {
+            steps {
+                script {
+                    sh './mvnw clean verify'
+                }
+            }
+            post {
+                always {
+                    junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
+                }
+            }
+        }
+
+        stage('Frontend Tests') {
+            steps {
+                dir('frontend') {
+                    sh 'npm ci'
+                    sh 'npm run test -- --watch=false'
+                }
+            }
+        }
+
+        stage('NPM Audit') {
+            steps {
+                // Non-blocking: findings are archived as a continuous-quality-tracking record,
+                // not a build gate (npm audit's non-zero exit on findings is swallowed with `|| true`).
+                dir('frontend') {
+                    sh 'npm ci'
+                    sh 'npm audit --omit=dev --json > npm-audit-report.json || true'
+                    sh 'npm audit --omit=dev || true'
+                }
+            }
+        }
+
+        stage('Archive NPM Audit Report') {
+            steps {
+                archiveArtifacts artifacts: 'frontend/npm-audit-report.json', fingerprint: true, allowEmptyArchive: true
+            }
+        }
+
+        stage('OWASP Dependency-Check') {
+            steps {
+                // Non-blocking, same rationale as the NPM Audit stage above. No NVD API key is
+                // configured yet, so the first run syncs the CVE database unauthenticated and can
+                // be slow; add one later via withCredentials + -Dnvd.api.key if this becomes a problem.
+                sh './mvnw org.owasp:dependency-check-maven:12.1.1:check || true'
+            }
+        }
+
+        stage('Archive Dependency-Check Report') {
+            steps {
+                archiveArtifacts artifacts: 'target/dependency-check-report/**', fingerprint: true, allowEmptyArchive: true
+            }
+        }
+
         stage('Build Native Binary') {
             steps {
                 script {

@@ -48,9 +48,13 @@ public class AdminUserController {
   @PutMapping("/{id}/password")
   @PreAuthorize("hasRole('ADMIN')")
   public ResponseEntity<?> updatePassword(@PathVariable long id, @RequestBody UpdatePasswordRequest request) {
-    return userService.updatePassword(id, request.newPassword())
-            .<ResponseEntity<?>>map(ResponseEntity::ok)
-            .orElseGet(() -> ResponseEntity.notFound().build());
+    try {
+      return userService.updatePassword(id, request.newPassword())
+              .<ResponseEntity<?>>map(ResponseEntity::ok)
+              .orElseGet(() -> ResponseEntity.notFound().build());
+    } catch (IllegalArgumentException e) {
+      return ResponseEntity.badRequest().body(e.getMessage());
+    }
   }
 
   @DeleteMapping("/{id}")

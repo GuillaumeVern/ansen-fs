@@ -112,7 +112,7 @@ class UserServiceTest {
         User savedUser = User.builder().username("bob").userRoles(List.of(personalRole, globalRole)).build();
         when(userRepository.findByUsernameWithRolesAndPermissions("bob")).thenReturn(Optional.of(savedUser));
 
-        userService.registerNewUser(new CreateUserRequest("bob", "secret"));
+        userService.registerNewUser(new CreateUserRequest("bob", "secret123"));
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         org.mockito.Mockito.verify(userRepository).save(userCaptor.capture());
@@ -128,7 +128,7 @@ class UserServiceTest {
     void registerNewUserThrowsWhenGlobalRoleMissing() {
         when(roleRepository.findByName("USER_ROLE")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret")))
+        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret123")))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -137,7 +137,7 @@ class UserServiceTest {
         when(roleRepository.findByName("USER_ROLE")).thenReturn(Optional.of(new Role(2L, "USER_ROLE", null)));
         when(fileRepository.findIdByNameAndParent("root", null)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret")))
+        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret123")))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -148,7 +148,7 @@ class UserServiceTest {
         when(fileRepository.createFolder(10, "bob")).thenReturn(55);
         when(userRepository.findByUsernameWithRolesAndPermissions("bob")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret")))
+        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret123")))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -162,7 +162,7 @@ class UserServiceTest {
                 .build();
         when(userRepository.findByUsernameWithRolesAndPermissions("bob")).thenReturn(Optional.of(savedUserMissingPersonalRole));
 
-        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret")))
+        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "secret123")))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -297,11 +297,28 @@ class UserServiceTest {
         User target = User.builder().ID(1L).username("alice").build();
         when(userRepository.get(1L)).thenReturn(Optional.of(target));
         when(userRepository.findByUsernameWithRolesAndPermissions("alice")).thenReturn(Optional.of(target));
-        when(passwordEncoder.encode("newpass")).thenReturn("encoded-newpass");
+        when(passwordEncoder.encode("newpass123")).thenReturn("encoded-newpass");
 
-        Optional<UserSummary> result = userService.updatePassword(1L, "newpass");
+        Optional<UserSummary> result = userService.updatePassword(1L, "newpass123");
 
         assertThat(result).isPresent();
         org.mockito.Mockito.verify(userRepository).updatePassword(1L, "encoded-newpass");
+    }
+
+    @Test
+    void updatePasswordRejectsAWeakPassword() {
+        User target = User.builder().ID(1L).username("alice").build();
+        when(userRepository.get(1L)).thenReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> userService.updatePassword(1L, "short"))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.mockito.Mockito.verify(passwordEncoder, org.mockito.Mockito.never()).encode(any());
+    }
+
+    @Test
+    void registerNewUserRejectsAWeakPassword() {
+        assertThatThrownBy(() -> userService.registerNewUser(new CreateUserRequest("bob", "short")))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.mockito.Mockito.verifyNoInteractions(roleRepository);
     }
 }

@@ -45,7 +45,6 @@ public class SecurityConfig {
             .requestMatchers("/api/auth/login").permitAll()
             .requestMatchers("/api/users/create").permitAll()
             .requestMatchers("/api/admin/**").hasRole("ADMIN")
-            .requestMatchers("/api/files/**").permitAll()
             .requestMatchers("/api/**").authenticated()
             .requestMatchers("/**").permitAll());
     return http.build();

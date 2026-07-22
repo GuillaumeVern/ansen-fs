@@ -10,10 +10,12 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
@@ -33,7 +35,7 @@ class AuthControllerTest {
     @BeforeEach
     void setUp() {
         mocks = MockitoAnnotations.openMocks(this);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(userService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(userService, new LoginRateLimiter()))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
     }
@@ -47,6 +49,34 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/auth/login").contentType("application/json").content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").value("signed-token"));
+    }
+
+    @Test
+    void loginReturnsUnauthorizedOnBadCredentials() throws Exception {
+        when(userService.authenticate("alice", "wrong")).thenThrow(new UsernameNotFoundException("bad creds"));
+
+        String body = new ObjectMapper().writeValueAsString(new LoginRequest("alice", "wrong"));
+
+        mockMvc.perform(post("/api/auth/login").contentType("application/json").content(body))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void loginIsRateLimitedAfterRepeatedFailures() throws Exception {
+        LoginRateLimiter rateLimiter = new LoginRateLimiter(3, Duration.ofMinutes(1));
+        MockMvc rateLimitedMockMvc = MockMvcBuilders.standaloneSetup(new AuthController(userService, rateLimiter))
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+                .build();
+        when(userService.authenticate("mallory", "wrong")).thenThrow(new UsernameNotFoundException("bad creds"));
+        String body = new ObjectMapper().writeValueAsString(new LoginRequest("mallory", "wrong"));
+
+        for (int i = 0; i < 3; i++) {
+            rateLimitedMockMvc.perform(post("/api/auth/login").contentType("application/json").content(body))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        rateLimitedMockMvc.perform(post("/api/auth/login").contentType("application/json").content(body))
+                .andExpect(status().isTooManyRequests());
     }
 
     @Test

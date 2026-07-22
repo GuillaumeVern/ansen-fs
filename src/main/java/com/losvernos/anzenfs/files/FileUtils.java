@@ -1,11 +1,15 @@
 package com.losvernos.anzenfs.files;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class FileUtils {
+  private static final Logger log = LoggerFactory.getLogger(FileUtils.class);
   private static final String APP_NAME = "anzenfs";
 
   public static File getDataDir() {
@@ -28,8 +32,8 @@ public class FileUtils {
           .map(Path::toFile)
           .forEach(java.io.File::delete);
     } catch (IOException e) {
-      // Log it, but don't crash the whole app if a temp file is stuck
-      System.err.println("Could not clean up staging directory: " + e.getMessage());
+      // Don't crash the whole app if a temp file is stuck
+      log.warn("Could not clean up staging directory: {}", e.getMessage());
     }
   }
 }

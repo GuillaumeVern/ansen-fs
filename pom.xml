@@ -184,6 +184,18 @@
 				</executions>
 			</plugin>
 			<plugin>
+				<!-- Not bound to any lifecycle phase on purpose: it's invoked explicitly by the
+				     Jenkins "OWASP Dependency-Check" stage so a slow first-time NVD sync never
+				     blocks a regular `mvn package`/`native:compile` build. -->
+				<groupId>org.owasp</groupId>
+				<artifactId>dependency-check-maven</artifactId>
+				<version>12.1.1</version>
+				<configuration>
+					<format>ALL</format>
+					<outputDirectory>${project.build.directory}/dependency-check-report</outputDirectory>
+				</configuration>
+			</plugin>
+			<plugin>
 				<groupId>com.github.eirslett</groupId>
 				<artifactId>frontend-maven-plugin</artifactId>
 				<version>1.15.0</version>

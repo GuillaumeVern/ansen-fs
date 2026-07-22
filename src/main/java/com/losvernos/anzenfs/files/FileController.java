@@ -68,6 +68,7 @@ public class FileController {
   }
 
   @GetMapping("/home")
+  @PreAuthorize("isAuthenticated()")
   public ResponseEntity<FileNode> getHomeFolder(@AuthenticationPrincipal User currentUser) {
     return ResponseEntity.ok(fileService.getHomeFolder(currentUser));
   }

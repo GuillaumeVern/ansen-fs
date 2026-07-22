@@ -4,7 +4,7 @@ import java.security.Key;
 import java.util.Date;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import io.jsonwebtoken.Claims;
@@ -17,7 +17,7 @@ import io.jsonwebtoken.security.Keys;
 public class JwtUtils {
   private final Key signingKey;
 
-  public JwtUtils(@Value("${app.jwt.secret}") String secret) {
+  public JwtUtils(@Qualifier("jwtSigningSecret") String secret) {
     this.signingKey = Keys.hmacShaKeyFor(secret.getBytes());
   }
 
