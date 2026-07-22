@@ -66,6 +66,13 @@
   vertical-align: middle;
 }
 
+// ant-design's default dark-menu selected background (#1890ff) only reaches a 3.24:1
+// contrast ratio with white text, below the WCAG 2 AA 4.5:1 minimum for normal text.
+// blue-8 from the same ant-design palette reaches ~7.5:1.
+::ng-deep .menu-sidebar .ant-menu-dark .ant-menu-item-selected {
+  background-color: #0050b3;
+}
+
 .sidebar-logo .app-name {
   display: inline-block;
   margin: 0 0 0 20px;

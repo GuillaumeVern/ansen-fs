@@ -17,18 +17,16 @@
     </div>
     <nav aria-label="Main navigation">
       <ul nz-menu nzTheme="dark" nzMode="inline" [nzInlineCollapsed]="isCollapsed">
-        <ul>
+        <li nz-menu-item nzMatchRouter>
+          <nz-icon nzType="folder" aria-hidden="true"/>
+          <a routerLink="/files"> Files</a>
+        </li>
+        @if (authService.isAdmin()) {
           <li nz-menu-item nzMatchRouter>
-            <nz-icon nzType="folder" aria-hidden="true"/>
-            <a routerLink="/files"> Files</a>
+            <nz-icon nzType="team" aria-hidden="true"/>
+            <a routerLink="/admin"> Admin</a>
           </li>
-          @if (authService.isAdmin()) {
-            <li nz-menu-item nzMatchRouter>
-              <nz-icon nzType="team" aria-hidden="true"/>
-              <a routerLink="/admin"> Admin</a>
-            </li>
-          }
-        </ul>
+        }
       </ul>
     </nav>
   </nz-sider>

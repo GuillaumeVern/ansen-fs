@@ -1,13 +1,15 @@
-<nz-card nzHoverable
-         [nzCover]="coverTemplate"
-         [attr.role]="data.type === 'FOLDER' ? 'button' : null"
-         [attr.tabindex]="data.type === 'FOLDER' ? 0 : null"
-         [attr.aria-label]="data.type === 'FOLDER' ? 'Open folder ' + data.name : null"
-         (click)="open()"
-         (keydown)="onCardKeydown($event)">
+<div class="store-element">
+  <nz-card nzHoverable
+           [nzCover]="coverTemplate"
+           [attr.role]="data.type === 'FOLDER' ? 'button' : null"
+           [attr.tabindex]="data.type === 'FOLDER' ? 0 : null"
+           [attr.aria-label]="data.type === 'FOLDER' ? 'Open folder ' + data.name : null"
+           (click)="open()"
+           (keydown)="onCardKeydown($event)">
 
-  <nz-card-meta [nzTitle]="data.name"
-                [nzDescription]="displaySize" />
+    <nz-card-meta [nzTitle]="data.name"
+                  [nzDescription]="displaySize" />
+  </nz-card>
 
   <div class="card-actions">
     <button nz-button nzType="primary" nzSize="small" nzShape="circle"
@@ -28,7 +30,7 @@
       <nz-icon nzType="delete" aria-hidden="true" />
     </button>
   </div>
-</nz-card>
+</div>
 
 <ng-template #coverTemplate>
   <div class="card-cover-wrapper">

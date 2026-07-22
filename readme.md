@@ -1,24 +1,36 @@
 # AnzenFS
 
-Gestionnaire de fichiers web sécurisé (backend Spring Boot + frontend Angular).
+A secure web file manager (Spring Boot backend + Angular frontend).
 
-## Prérequis
+## Getting AnzenFS
 
-- **GraalVM Community Edition 25** pour la compilation native (recommandé pour la production).
-- Sinon, un **JDK 25** + **Maven** suffisent pour le mode JVM classique.
-- **Node.js 22** est nécessaire pour le build du frontend Angular, mais il est installé automatiquement par Maven (`frontend-maven-plugin`) : aucune installation manuelle requise.
+The recommended way to get AnzenFS is to download a precompiled build from the
+[GitHub Releases page](https://github.com/GuillaumeVern/anzen-fs/releases). Each release is a
+single, self-contained native binary: no JVM, Node.js, or build tools required on the target
+machine.
 
-## Compilation
+Building from source is also supported and described below, for anyone who wants to build a
+custom version or contribute to the project.
 
-### Binaire natif (recommandé pour la production)
+## Building from source
+
+### Requirements
+
+- **GraalVM Community Edition 25** for native compilation (recommended for production builds).
+- Alternatively, a plain **JDK 25** + **Maven** are enough for the classic JVM mode.
+- **Node.js 22** is required to build the Angular frontend, but it is installed automatically by
+  Maven (`frontend-maven-plugin`), so no manual installation is needed.
+
+### Native binary (recommended for production)
 
 ```
 mvn clean package -Pnative native:compile
 ```
 
-Produit un exécutable autonome `target/anzenfs`, sans dépendance à une JVM installée sur la machine cible.
+Produces a self-contained executable at `target/anzenfs`, with no dependency on a JVM installed
+on the target machine.
 
-### JAR classique (développement)
+### Classic JAR (development)
 
 ```
 mvn clean package
@@ -27,48 +39,135 @@ mvn spring-boot:run
 
 ## Configuration
 
-Aucun secret à fournir manuellement au démarrage :
+No secrets need to be provided manually at startup:
 
-- **Base de données** : SQLite, stockée automatiquement dans le répertoire de données applicatif.
-- **Secret JWT** : généré aléatoirement (512 bits) au tout premier démarrage puis persisté dans ce même répertoire avec des permissions restreintes au propriétaire (`chmod 600`) — voir `JwtSecretStore`. Il n'est jamais versionné dans Git.
+- **Database**: SQLite, stored automatically in the application's data directory.
+- **JWT secret**: generated randomly (512 bits) on first startup and persisted in that same
+  directory with owner-only permissions (`chmod 600`); see `JwtSecretStore`. It is never
+  committed to version control.
 
-Le répertoire de données par défaut est `~/.local/share/anzenfs`. Il peut être redéfini via la variable d'environnement `XDG_DATA_HOME` (le répertoire utilisé sera alors `$XDG_DATA_HOME/anzenfs`) — utile pour isoler plusieurs environnements (staging/production) sur la même machine.
+The default data directory is `~/.local/share/anzenfs`. It can be overridden with the
+`XDG_DATA_HOME` environment variable (the directory used then becomes `$XDG_DATA_HOME/anzenfs`),
+which is useful for isolating multiple environments (e.g. staging/production) on the same
+machine.
 
-## Lancement
+## Running
 
 ```
 ./target/anzenfs
 ```
 
-ou, en mode JAR :
+or, in JAR mode:
 
 ```
 java -jar target/anzenfs-0.0.1-SNAPSHOT.jar
 ```
 
-L'application écoute par défaut sur le port 8080 et sert à la fois l'API REST (`/api/**`) et le frontend Angular compilé.
+The application listens on port 8080 by default and serves both the REST API (`/api/**`) and the
+compiled Angular frontend.
 
 ## TLS / HTTPS
 
-AnzenFS ne termine pas TLS lui-même : il est conçu pour être placé derrière un reverse proxy. Sur mon instance de production, j'utilise **Traefik**, qui délivre et renouvelle automatiquement un certificat **Let's Encrypt**.
+AnzenFS does not terminate TLS itself: it is designed to run behind a reverse proxy. A common
+setup is **Traefik**, which can issue and renew a **Let's Encrypt** certificate automatically.
 
-Si vous installez AnzenFS vous-même, la mise en place d'une terminaison TLS (reverse proxy, certificat) est **de votre responsabilité** : n'exposez pas l'application directement sur Internet en HTTP sans un proxy TLS devant elle.
+Setting up TLS termination (reverse proxy, certificate) is the operator's responsibility when
+self-hosting AnzenFS: the application should not be exposed directly to the Internet over plain
+HTTP without a TLS-terminating proxy in front of it.
 
-## Environnements et intégration continue
+## Accessibility
 
-Le déploiement est piloté par un pipeline Jenkins (`Jenkinsfile`) :
+AnzenFS targets **RGAA** (Référentiel Général d'Amélioration de l'Accessibilité), level **AA**,
+across the whole application (login, file management, administration).
 
-1. Tests backend (JUnit + JaCoCo) et frontend (Vitest), avec audits de dépendances (`npm audit`, OWASP Dependency-Check).
-2. Compilation native.
-3. Publication d'une release GitHub taguée (`v1.0.<numéro de build>`).
-4. Déploiement automatique sur l'environnement de **staging**.
-5. Promotion manuelle vers l'environnement de **production** (exposé sur Internet), après validation.
+The frontend is built on **ng-zorro-antd**, which provides solid keyboard handling and ARIA roles
+on its standard components, complemented by custom ARIA attributes on the project's own templates
+(form labels, live regions, icon-only action buttons, etc.). The application is checked regularly
+with an automated audit tool (axe DevTools, WCAG 2.1 AA ruleset), and issues found this way are
+fixed as they come up. An automated audit does not cover every RGAA criterion, however (full
+keyboard-navigation walkthroughs, screen-reader compatibility), and a complementary manual review
+would be needed before any formal RGAA conformance statement.
 
-## Mise à jour
+## Environments and continuous integration
+
+Deployment is driven by a Jenkins pipeline (`Jenkinsfile`):
+
+1. Backend tests (JUnit + JaCoCo) and frontend tests (Vitest), together with dependency audits
+   (`npm audit`, OWASP Dependency-Check).
+2. Native compilation.
+3. Publishing a tagged GitHub release (`v1.0.<build number>`).
+4. Automatic deployment to the **staging** environment.
+5. Manual promotion to the **production** environment (exposed on the Internet), after
+   validation.
+
+## User guide
+
+### Signing in
+
+Opening the application redirects to `/login` if the user isn't authenticated yet. Enter a
+username and password, then submit. Invalid credentials show an error message; after 5
+consecutive failed attempts on the same account within one minute, further attempts are
+temporarily blocked (brute-force protection).
+
+### Browsing and managing files
+
+The **Files** page shows the contents of the current folder as a grid of cards (one file or
+folder per card, with its name and size). The breadcrumb trail at the top of the page allows
+navigating back to a parent folder. Clicking a folder card opens it.
+
+To add files: drag and drop one or more files (or an entire folder) directly onto the content
+area, or use the **Upload Files** / **Upload Folder** toolbar buttons to open the system file
+picker.
+
+Each card offers two actions: **download** and **delete** (deleting asks for confirmation first;
+deleting a folder removes all of its contents).
+
+### Transfer tracking
+
+A transfer tray appears at the bottom of the screen while uploads and downloads are in progress,
+showing a progress bar and an estimated time remaining for each.
+
+### Previews
+
+Image and video files show a live preview directly on their card. PDF files show a generic icon
+instead of an embedded rendering: a deliberate choice, since a PDF `<iframe>` is not accessible
+by keyboard or by screen readers.
+
+### Administration (ADMIN role required)
+
+The **Admin** link in the side menu only appears for administrator accounts, and leads to three
+tabs:
+
+- **Users**: create an account (username and password, 8 characters minimum, with at least one
+  letter and one digit), assign it roles, reset its password, or delete it. The built-in `admin`
+  account cannot be deleted, and an administrator can neither delete their own account nor remove
+  their own `ADMIN` role.
+- **Roles**: create, edit, or delete a role, and attach the desired permissions to it.
+- **Permissions**: create or delete the permissions available (e.g. `READ`, `WRITE`) for
+  composing roles.
+
+## Updating
+
+The recommended way to update a running instance is to download the latest precompiled binary
+from the [GitHub Releases page](https://github.com/GuillaumeVern/anzen-fs/releases), replace the
+existing `target/anzenfs` binary on the server with it, and restart the service.
+
+Instances built from source can instead be updated by rebuilding:
 
 ```
 git pull
 mvn clean package -Pnative native:compile
 ```
 
-Remplacez le binaire `target/anzenfs` sur le serveur puis redémarrez le service. Les migrations de schéma de base de données (backfills) s'exécutent automatiquement au démarrage si nécessaire.
+Then replace the binary on the server and restart the service, as above.
+
+**Schema migrations.** The project includes "backfill runners" (`FileSizeBackfillRunner`,
+`FileTypeBackfillRunner`) that run automatically at startup to bring existing data up to a new
+schema, without data loss or manual intervention. Any schema change that requires migrating
+existing data follows this same mechanism: a new, idempotent backfill runner that runs at
+startup.
+
+**Versioning.** Every successful build on the project's Jenkins pipeline is published as a tagged
+GitHub release, `v1.0.<build number>` (see the CI section above). That tag unambiguously
+identifies the deployed version; notable changes for a given version can be found via the merged
+pull requests that went into that build.
