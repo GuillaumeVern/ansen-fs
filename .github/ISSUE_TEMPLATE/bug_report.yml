@@ -1,0 +1,74 @@
+name: Signalement d'anomalie
+description: Consigner un bogue détecté sur AnzenFS (en production ou en recette)
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version concernée
+      description: Tag de release (ex. v1.0.81) ou commit, si connu
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Sévérité
+      options:
+        - Critique (sécurité / perte de données / indisponibilité)
+        - Majeure (fonctionnalité principale cassée, contournement pénible ou impossible)
+        - Mineure (gêne ponctuelle, contournement simple)
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte
+      description: Compte utilisé (rôle/permissions), navigateur/OS, environnement (staging/prod)
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes de reproduction
+      description: Liste numérotée, la plus précise possible
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportement observé
+      description: Message d'erreur exact, code HTTP, capture d'écran si pertinent
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traces
+      description: Extrait de log serveur ou console navigateur, si disponible
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproducibility
+    attributes:
+      label: Reproductibilité
+      description: Systématique, intermittente, ou observée une seule fois
+    validations:
+      required: true

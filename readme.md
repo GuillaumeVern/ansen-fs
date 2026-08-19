@@ -95,15 +95,42 @@ would be needed before any formal RGAA conformance statement.
 
 ## Environments and continuous integration
 
-Deployment is driven by a Jenkins pipeline (`Jenkinsfile`):
+The Jenkins pipeline (`Jenkinsfile`) handles build and release, not deployment:
 
 1. Backend tests (JUnit + JaCoCo) and frontend tests (Vitest), together with dependency audits
    (`npm audit`, OWASP Dependency-Check).
 2. Native compilation.
 3. Publishing a tagged GitHub release (`v1.0.<build number>`).
-4. Automatic deployment to the **staging** environment.
-5. Manual promotion to the **production** environment (exposed on the Internet), after
-   validation.
+
+Deploying a release to any environment (staging or production) is a manual step performed on the
+target server, described in the **Updating** section below: download the binary from that
+release and restart the service. There is currently no automated deployment stage.
+
+## Monitoring
+
+The application exposes health, build info, and metrics through Spring Boot Actuator, kept
+strictly internal:
+
+- Served on its own port (`9090`), separate from the application port (`8080`), and bound to
+  `127.0.0.1` only (`management.server.address`, see `application.properties`). The reverse proxy
+  only forwards `8080`, so this port is unreachable from outside the host - a probe must run on
+  the host itself, or reach it over an SSH tunnel.
+- `/actuator/health` reports application availability (and liveness/readiness probes) - point an
+  uptime check at it.
+- `/actuator/info` reports the build name, version, and build time.
+- `/actuator/metrics` exposes JVM/HTTP metrics for deeper inspection when needed.
+- `/actuator/prometheus` exposes the same metrics in Prometheus's scrape format (pull model: the
+  app holds no monitoring credentials, Prometheus simply polls this endpoint on a schedule).
+  Run the Prometheus instance scraping this endpoint on the same host as the application (ideally
+  in the same container/LXC), since the endpoint is bound to `127.0.0.1` only; scraping it from a
+  different host would require binding Actuator to a non-loopback address instead and relying on
+  network-level isolation between hosts to keep it internal.
+
+Application logs are written to `<app-data-dir>/logs/anzenfs.log` (see the Configuration section
+above for `<app-data-dir>`), with an explicit rotation and retention policy (see
+`application.properties`, `logging.logback.rollingpolicy.*`): rolled over daily or past 100MB
+(whichever comes first), history capped at 30 days and 1GB of total disk usage, oldest files
+deleted first once that cap is reached.
 
 ## User guide
 

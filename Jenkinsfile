@@ -115,7 +115,7 @@ pipeline {
                           url: "https://api.github.com/repos/${repo}/releases",
                           customHeaders: [[name: 'Authorization', value: "token ${GITHUB_TOKEN}"]],
                           httpMode: "POST",
-                          requestBody: """{"tag_name": "${tagName}", "name": "build ${tagName}", "draft": false, "prerelease": false}"""
+                          requestBody: """{"tag_name": "${tagName}", "name": "build ${tagName}", "draft": false, "prerelease": false, "generate_release_notes": true}"""
                         )
 
                         def releaseID = new groovy.json.JsonSlurper().parseText(releaseResponse.content).id

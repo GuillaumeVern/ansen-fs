@@ -55,16 +55,18 @@ public class AnzenfsApplication {
 
   private static final String APP_NAME = "anzenfs";
   private static final String DB_NAME = "anzenfs.db";
+  private static final String LOG_FILE_NAME = "anzenfs.log";
 
   static {
     System.setProperty("custom.db.path", getDBFilePath());
+    System.setProperty("logging.file.name", getAppDataDir().toPath().resolve("logs").resolve(LOG_FILE_NAME).toString());
   }
 
   public static void main(String[] args) {
     SpringApplication.run(AnzenfsApplication.class, args);
   }
 
-  private static String getDBFilePath() {
+  private static File getAppDataDir() {
     String xdgDataHome = System.getenv("XDG_DATA_HOME");
     if (xdgDataHome == null || xdgDataHome.isEmpty()) {
       xdgDataHome = System.getProperty("user.home") + File.separator + ".local" + File.separator + "share";
@@ -74,7 +76,11 @@ public class AnzenfsApplication {
     if (!appDataDir.exists()) {
       appDataDir.mkdirs();
     }
-    File dbFile = new File(appDataDir, DB_NAME);
+    return appDataDir;
+  }
+
+  private static String getDBFilePath() {
+    File dbFile = new File(getAppDataDir(), DB_NAME);
     if (!dbFile.exists()) {
       try {
         dbFile.createNewFile();
