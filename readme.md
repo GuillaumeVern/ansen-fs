@@ -132,6 +132,24 @@ above for `<app-data-dir>`), with an explicit rotation and retention policy (see
 (whichever comes first), history capped at 30 days and 1GB of total disk usage, oldest files
 deleted first once that cap is reached.
 
+### Probes and alerting
+
+Three probes are defined on top of the Prometheus metrics above, each tied to a threshold and a
+Discord notification (Grafana Alerting, `up`/disk/HTTP-error metrics are all already exposed by
+Actuator, no extra instrumentation needed):
+
+| Probe | Metric | Threshold | Purpose |
+|---|---|---|---|
+| Availability | `up{job="anzenfs"}` | `== 0` for 2 min | Detects the app being down or unreachable |
+| Storage headroom | `disk_free_bytes` / `disk_total_bytes` | `< 10%` for 5 min | AnzenFS is a file storage app - running out of disk directly breaks uploads |
+| Server error rate | `http_server_requests_seconds_count{status=~"5.."}` | any 5xx in a 5 min window | Surfaces backend errors before a user reports them |
+
+### Centralized logs
+
+The rotated log file (see above) is shipped off-host by a Promtail agent running alongside the
+application, to a Loki instance next to Grafana, where it is queried and correlated with the
+Prometheus metrics from the same Grafana dashboard.
+
 ## User guide
 
 ### Signing in
