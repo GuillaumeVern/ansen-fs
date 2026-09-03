@@ -12,7 +12,9 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -409,5 +411,184 @@ class FileServiceTest {
 
         assertThat(fileService.deleteItemByExternalId("folder-uuid")).isTrue();
         assertThat(Files.exists(folderPath)).isFalse();
+    }
+
+    // --- getOrCreateWebDavRoot ---
+
+    @Test
+    void getOrCreateWebDavRootReturnsExistingPhotosFolder() {
+        Role userRole = new Role(2L, "USER_ROLE", null);
+        User user = User.builder().username("alice").userRoles(List.of(userRole)).build();
+
+        when(fileRepository.findIdByNameAndParent("root", null)).thenReturn(Optional.of(10));
+        when(fileRepository.findIdByNameAndParent("alice", 10)).thenReturn(Optional.of(5));
+        FileNode photos = new FileNode("photos-uuid", null, "Photos", FileType.FOLDER, null, 0L);
+        when(fileRepository.findByNameAndParent("Photos", 5)).thenReturn(Optional.of(photos));
+
+        assertThat(fileService.getOrCreateWebDavRoot(user)).isEqualTo(photos);
+        verify(fileRepository, never()).createFolder(any(), any());
+    }
+
+    @Test
+    void getOrCreateWebDavRootCreatesPhotosFolderWhenMissing() {
+        Role userRole = new Role(2L, "USER_ROLE", null);
+        User user = User.builder().username("alice").userRoles(List.of(userRole)).build();
+
+        when(fileRepository.findIdByNameAndParent("root", null)).thenReturn(Optional.of(10));
+        when(fileRepository.findIdByNameAndParent("alice", 10)).thenReturn(Optional.of(5));
+        FileNode photos = new FileNode("photos-uuid", null, "Photos", FileType.FOLDER, null, 0L);
+        when(fileRepository.findByNameAndParent("Photos", 5))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(photos));
+
+        assertThat(fileService.getOrCreateWebDavRoot(user)).isEqualTo(photos);
+        verify(fileRepository).createFolder(5, "Photos");
+    }
+
+    @Test
+    void getOrCreateWebDavRootUsesSystemRootAsHomeForAdmin() {
+        Role admin = new Role(1L, "ADMIN", null);
+        User user = User.builder().username("root").userRoles(List.of(admin)).build();
+
+        when(fileRepository.findIdByNameAndParent("root", null)).thenReturn(Optional.of(10));
+        FileNode photos = new FileNode("photos-uuid", null, "Photos", FileType.FOLDER, null, 0L);
+        when(fileRepository.findByNameAndParent("Photos", 10)).thenReturn(Optional.of(photos));
+
+        assertThat(fileService.getOrCreateWebDavRoot(user)).isEqualTo(photos);
+    }
+
+    // --- resolveNode ---
+
+    private static final FileNode WEBDAV_ROOT = new FileNode("root-uuid", null, "Photos", FileType.FOLDER, null, 0L);
+
+    @Test
+    void resolveNodeReturnsRootWhenPathBlank() {
+        assertThat(fileService.resolveNode(WEBDAV_ROOT, "")).contains(WEBDAV_ROOT);
+        assertThat(fileService.resolveNode(WEBDAV_ROOT, null)).contains(WEBDAV_ROOT);
+    }
+
+    @Test
+    void resolveNodeWalksSegmentsAndReturnsTerminalNode() {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.findIdByNameAndParent("2026", 5)).thenReturn(Optional.of(6));
+        FileNode expected = new FileNode("img-uuid", null, "img.jpg", FileType.IMAGE, "hash", 10L);
+        when(fileRepository.findByNameAndParent("img.jpg", 6)).thenReturn(Optional.of(expected));
+
+        assertThat(fileService.resolveNode(WEBDAV_ROOT, "2026/img.jpg")).contains(expected);
+    }
+
+    @Test
+    void resolveNodeReturnsEmptyWhenIntermediateSegmentMissing() {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.findIdByNameAndParent("2026", 5)).thenReturn(Optional.empty());
+
+        assertThat(fileService.resolveNode(WEBDAV_ROOT, "2026/img.jpg")).isEmpty();
+    }
+
+    @Test
+    void resolveNodeReturnsEmptyWhenLeafSegmentMissing() {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.findByNameAndParent("img.jpg", 5)).thenReturn(Optional.empty());
+
+        assertThat(fileService.resolveNode(WEBDAV_ROOT, "img.jpg")).isEmpty();
+    }
+
+    // --- createCollection ---
+
+    @Test
+    void createCollectionCreatesMissingFolderAndReturnsTrue() {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.findIdByNameAndParent("2026", 5)).thenReturn(Optional.empty());
+
+        assertThat(fileService.createCollection(WEBDAV_ROOT, "2026")).isTrue();
+        verify(fileRepository).createFolder(5, "2026");
+    }
+
+    @Test
+    void createCollectionReturnsFalseWhenAlreadyExists() {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.findIdByNameAndParent("2026", 5)).thenReturn(Optional.of(6));
+
+        assertThat(fileService.createCollection(WEBDAV_ROOT, "2026")).isFalse();
+        verify(fileRepository, never()).createFolder(any(), any());
+    }
+
+    @Test
+    void createCollectionCreatesMissingAncestorsForNestedPath() {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.findIdByNameAndParent("2026", 5)).thenReturn(Optional.empty());
+        when(fileRepository.createFolder(5, "2026")).thenReturn(6);
+        when(fileRepository.findIdByNameAndParent("09", 6)).thenReturn(Optional.empty());
+
+        assertThat(fileService.createCollection(WEBDAV_ROOT, "2026/09")).isTrue();
+        verify(fileRepository).createFolder(5, "2026");
+        verify(fileRepository).createFolder(6, "09");
+    }
+
+    // --- putFile ---
+
+    @Test
+    void putFileStoresNewFileAtRootAndInsertsRow() throws Exception {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.getFullPathById(5)).thenReturn("root/alice/Photos");
+        when(fileRepository.findByNameAndParent("img.jpg", 5)).thenReturn(Optional.empty());
+        when(fileRepository.insertFile(eq(5), eq("img.jpg"), eq(FileType.IMAGE), anyString(), eq(10L)))
+                .thenReturn("img-uuid");
+
+        InputStream content = new ByteArrayInputStream("binarydata".getBytes(StandardCharsets.UTF_8));
+        FileNode result = fileService.putFile(WEBDAV_ROOT, "img.jpg", content);
+
+        Path expected = storageRoot.resolve("root/alice/Photos/img.jpg");
+        assertThat(Files.exists(expected)).isTrue();
+        assertThat(Files.readString(expected)).isEqualTo("binarydata");
+        assertThat(result.uuid()).isEqualTo("img-uuid");
+        verify(fileRepository, never()).updateFileContent(any(), any(), anyLong());
+    }
+
+    @Test
+    void putFileOverwritesExistingFileInPlace() throws Exception {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.getFullPathById(5)).thenReturn("root/alice/Photos");
+
+        Path existingPath = storageRoot.resolve("root/alice/Photos/img.jpg");
+        Files.createDirectories(existingPath.getParent());
+        Files.writeString(existingPath, "old content");
+
+        FileNode existing = new FileNode("img-uuid", null, "img.jpg", FileType.IMAGE, "oldhash", 11L);
+        when(fileRepository.findByNameAndParent("img.jpg", 5)).thenReturn(Optional.of(existing));
+
+        InputStream content = new ByteArrayInputStream("new content!".getBytes(StandardCharsets.UTF_8));
+        FileNode result = fileService.putFile(WEBDAV_ROOT, "img.jpg", content);
+
+        assertThat(Files.readString(existingPath)).isEqualTo("new content!");
+        assertThat(result.uuid()).isEqualTo("img-uuid");
+        verify(fileRepository).updateFileContent(eq("img-uuid"), anyString(), eq(12L));
+        verify(fileRepository, never()).insertFile(any(), any(), any(), any(), anyLong());
+    }
+
+    @Test
+    void putFileCreatesMissingSubfoldersFromRelativePath() throws Exception {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.findIdByNameAndParent("2026", 5)).thenReturn(Optional.empty());
+        when(fileRepository.createFolder(5, "2026")).thenReturn(6);
+        when(fileRepository.getFullPathById(6)).thenReturn("root/alice/Photos/2026");
+        when(fileRepository.findByNameAndParent("img.jpg", 6)).thenReturn(Optional.empty());
+
+        InputStream content = new ByteArrayInputStream("data".getBytes(StandardCharsets.UTF_8));
+        fileService.putFile(WEBDAV_ROOT, "2026/img.jpg", content);
+
+        assertThat(Files.exists(storageRoot.resolve("root/alice/Photos/2026/img.jpg"))).isTrue();
+        verify(fileRepository).createFolder(5, "2026");
+    }
+
+    @Test
+    void putFileRejectsPathEscapingStorageRoot() {
+        when(fileRepository.findIdByUuid("root-uuid")).thenReturn(Optional.of(5));
+        when(fileRepository.getFullPathById(5)).thenReturn("../../outside");
+
+        InputStream content = new ByteArrayInputStream("nope".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> fileService.putFile(WEBDAV_ROOT, "evil.txt", content))
+                .isInstanceOf(SecurityException.class);
     }
 }

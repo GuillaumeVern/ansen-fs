@@ -128,6 +128,17 @@ public class FileRepository {
     }
 
     /**
+     * Overwrites an existing file's content metadata in place (same external_id), for callers
+     * such as WebDAV PUT where re-uploading to an existing path is expected to replace it rather
+     * than create a duplicate row.
+     */
+    public void updateFileContent(String externalId, String hash, long size) {
+        jdbcTemplate.update(
+                "UPDATE files SET file_hash = ?, size_bytes = ? WHERE external_id = ?",
+                hash, size, externalId);
+    }
+
+    /**
      * Sums size_bytes across a folder and everything under it. Folder rows themselves have no
      * meaningful size_bytes of their own (SUM ignores their default of 0/NULL contribution
      * beyond what their descendant files carry), so this recursion is what makes a folder's

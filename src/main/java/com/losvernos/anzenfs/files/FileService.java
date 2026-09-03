@@ -3,12 +3,15 @@ package com.losvernos.anzenfs.files;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -161,11 +164,19 @@ public class FileService {
     if (null == path)
       return rootId;
 
+    return ensureFolderPath(rootId, segmentsOf(path));
+  }
+
+  /**
+   * Walks (creating as needed) a chain of folder names under {@code rootId}, returning the id of
+   * the final folder in the chain. Shared by regular multi-file upload (which only needs to
+   * create a file's ancestor folders, cf. {@link #resolveFolderHierarchy}) and WebDAV MKCOL
+   * (which creates the target collection itself, cf. {@link #createCollection}).
+   */
+  private Integer ensureFolderPath(Integer rootId, List<String> segments) {
     Integer currentParentId = rootId;
 
-    for (Path part : path) {
-      String folderName = part.toString();
-
+    for (String folderName : segments) {
       Optional<Integer> existing = fileRepository.findIdByNameAndParent(folderName, currentParentId);
 
       if (existing.isPresent()) {
@@ -176,6 +187,14 @@ public class FileService {
     }
 
     return currentParentId;
+  }
+
+  private List<String> segmentsOf(Path path) {
+    List<String> segments = new ArrayList<>();
+    for (Path part : path) {
+      segments.add(part.toString());
+    }
+    return segments;
   }
 
   private String generateHeuristicHash(Path fullPath) throws IOException {
@@ -193,6 +212,133 @@ public class FileService {
     } catch (NoSuchAlgorithmException e) {
       throw new RuntimeException("SHA-256 algorithm not found", e);
     }
+  }
+
+  // --- WebDAV ---
+
+  private static final String WEBDAV_ROOT_FOLDER_NAME = "Photos";
+
+  /**
+   * The WebDAV mount point for a given user: a dedicated subfolder of their home folder, created
+   * on first use. Kept separate from the home folder itself so an auto-sync client never sees or
+   * writes into the user's regular files, and so its content doesn't clutter their normal browsing.
+   */
+  public FileNode getOrCreateWebDavRoot(User currentUser) {
+    Integer homeId = resolveHomeFolderId(currentUser);
+
+    return fileRepository.findByNameAndParent(WEBDAV_ROOT_FOLDER_NAME, homeId)
+        .orElseGet(() -> {
+          fileRepository.createFolder(homeId, WEBDAV_ROOT_FOLDER_NAME);
+          return fileRepository.findByNameAndParent(WEBDAV_ROOT_FOLDER_NAME, homeId)
+              .orElseThrow(() -> new IllegalStateException("Failed to create WebDAV root folder"));
+        });
+  }
+
+  private Integer resolveHomeFolderId(User currentUser) {
+    boolean isAdmin = currentUser.getUserRoles() != null
+            && currentUser.getUserRoles().stream().anyMatch(r -> r.getName().equalsIgnoreCase("ADMIN"));
+
+    Integer rootId = fileRepository.findIdByNameAndParent("root", null)
+            .orElseThrow(() -> new IllegalStateException("System root folder missing"));
+
+    if (isAdmin) {
+      return rootId;
+    }
+
+    return fileRepository.findIdByNameAndParent(currentUser.getUsername(), rootId)
+            .orElseThrow(() -> new IllegalStateException("Home folder missing for user " + currentUser.getUsername()));
+  }
+
+  /**
+   * Resolves a slash-separated path relative to a WebDAV root (e.g. {@code "2026/09/img.jpg"})
+   * without creating anything - used by GET/PROPFIND/DELETE, which must fail on a missing
+   * resource rather than materialize it. An empty/blank path resolves to the root itself.
+   */
+  public Optional<FileNode> resolveNode(FileNode webDavRoot, String relativePath) {
+    if (relativePath == null || relativePath.isBlank()) {
+      return Optional.of(webDavRoot);
+    }
+
+    List<String> segments = segmentsOf(Path.of(relativePath));
+    Integer rootId = requireFolderId(webDavRoot);
+
+    Integer currentParentId = rootId;
+    for (int i = 0; i < segments.size() - 1; i++) {
+      Optional<Integer> next = fileRepository.findIdByNameAndParent(segments.get(i), currentParentId);
+      if (next.isEmpty()) {
+        return Optional.empty();
+      }
+      currentParentId = next.get();
+    }
+
+    return fileRepository.findByNameAndParent(segments.get(segments.size() - 1), currentParentId);
+  }
+
+  /**
+   * WebDAV MKCOL: creates the collection at {@code relativePath} (and any missing ancestor
+   * collections along the way, more lenient than strict RFC 4918 but harmless for a client we
+   * control). Returns {@code false} without creating anything if the collection already exists,
+   * matching MKCOL's "405 if it already exists" semantics.
+   */
+  public boolean createCollection(FileNode webDavRoot, String relativePath) {
+    List<String> segments = segmentsOf(Path.of(relativePath));
+    String targetName = segments.get(segments.size() - 1);
+    List<String> parentSegments = segments.subList(0, segments.size() - 1);
+
+    Integer parentId = ensureFolderPath(requireFolderId(webDavRoot), parentSegments);
+
+    if (fileRepository.findIdByNameAndParent(targetName, parentId).isPresent()) {
+      return false;
+    }
+
+    fileRepository.createFolder(parentId, targetName);
+    return true;
+  }
+
+  /**
+   * WebDAV PUT: stores {@code content} at {@code relativePath} under {@code webDavRoot},
+   * creating missing ancestor folders as needed (same folder-creation behavior as regular
+   * multi-file upload). A pre-existing file at that path is overwritten in place - same
+   * external_id, refreshed hash/size - rather than duplicated, matching PUT's replace semantics.
+   */
+  public FileNode putFile(FileNode webDavRoot, String relativePath, InputStream content) throws IOException {
+    Path incomingPath = Path.of(relativePath);
+    Integer folderId = resolveFolderHierarchy(requireFolderId(webDavRoot), incomingPath);
+
+    String ancestorPath = fileRepository.getFullPathById(folderId);
+    Path destinationDir = ancestorPath.isEmpty() ? storageRoot : storageRoot.resolve(ancestorPath);
+
+    String fileName = incomingPath.getFileName().toString();
+    Path targetLocation = destinationDir.resolve(fileName).normalize();
+    if (!targetLocation.startsWith(storageRoot)) {
+      throw new SecurityException("Escape attempt detected: " + relativePath);
+    }
+
+    Files.createDirectories(targetLocation.getParent());
+    Files.copy(content, targetLocation, StandardCopyOption.REPLACE_EXISTING);
+
+    String hash = generateHeuristicHash(targetLocation);
+    FileType fileType = FileType.fromFilename(fileName);
+    long fileSize = Files.size(targetLocation);
+
+    Optional<FileNode> existing = fileRepository.findByNameAndParent(fileName, folderId);
+    String externalId;
+    if (existing.isPresent()) {
+      externalId = existing.get().uuid();
+      fileRepository.updateFileContent(externalId, hash, fileSize);
+    } else {
+      externalId = fileRepository.insertFile(folderId, fileName, fileType, hash, fileSize);
+    }
+
+    thumbnailGeneratorRegistry.forType(fileType)
+        .ifPresent(generator -> generator.generate(targetLocation, thumbnailPathFor(externalId)));
+
+    return new FileNode(externalId, webDavRoot.uuid(), fileName, fileType, hash, fileSize);
+  }
+
+  private Integer requireFolderId(FileNode folder) {
+    return fileRepository.findIdByUuid(folder.uuid())
+        .orElseThrow(() -> new IllegalStateException("WebDAV folder missing in database: " + folder.uuid()));
   }
 
   public boolean deleteItemByExternalId(String externalId) {
