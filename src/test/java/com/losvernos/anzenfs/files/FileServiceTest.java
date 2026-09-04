@@ -344,26 +344,26 @@ class FileServiceTest {
         verify(fileRepository).getChildrenAfter(isNull(), isNull(), isNull(), eq(50), eq(List.of()));
     }
 
-    // --- deleteItemByExternalId ---
+    // --- permanentlyDeleteItemByExternalId ---
 
     @Test
-    void deleteItemByExternalIdReturnsFalseWhenRecordMissing() {
+    void permanentlyDeleteItemByExternalIdReturnsFalseWhenRecordMissing() {
         when(fileRepository.getFullPath("missing")).thenReturn(null);
 
-        assertThat(fileService.deleteItemByExternalId("missing")).isFalse();
+        assertThat(fileService.permanentlyDeleteItemByExternalId("missing")).isFalse();
         verify(fileRepository, never()).deleteItemAndGetDescendantPaths(any());
     }
 
     @Test
-    void deleteItemByExternalIdReturnsFalseWhenNoDescendants() {
+    void permanentlyDeleteItemByExternalIdReturnsFalseWhenNoDescendants() {
         when(fileRepository.getFullPath("orphan")).thenReturn("root/alice/orphan.txt");
         when(fileRepository.deleteItemAndGetDescendantPaths("orphan")).thenReturn(List.of());
 
-        assertThat(fileService.deleteItemByExternalId("orphan")).isFalse();
+        assertThat(fileService.permanentlyDeleteItemByExternalId("orphan")).isFalse();
     }
 
     @Test
-    void deleteItemByExternalIdRemovesPhysicalFile() throws Exception {
+    void permanentlyDeleteItemByExternalIdRemovesPhysicalFile() throws Exception {
         Path filePath = storageRoot.resolve("root/alice/doc.txt");
         Files.createDirectories(filePath.getParent());
         Files.writeString(filePath, "content");
@@ -372,12 +372,12 @@ class FileServiceTest {
         when(fileRepository.deleteItemAndGetDescendantPaths("doc-uuid"))
                 .thenReturn(List.<String[]>of(new String[]{"doc-uuid", "doc.txt", "FILE"}));
 
-        assertThat(fileService.deleteItemByExternalId("doc-uuid")).isTrue();
+        assertThat(fileService.permanentlyDeleteItemByExternalId("doc-uuid")).isTrue();
         assertThat(Files.exists(filePath)).isFalse();
     }
 
     @Test
-    void deleteItemByExternalIdRemovesAssociatedThumbnail() throws Exception {
+    void permanentlyDeleteItemByExternalIdRemovesAssociatedThumbnail() throws Exception {
         Path filePath = storageRoot.resolve("root/alice/clip.mp4");
         Files.createDirectories(filePath.getParent());
         Files.writeString(filePath, "moviebytes");
@@ -390,14 +390,14 @@ class FileServiceTest {
         when(fileRepository.deleteItemAndGetDescendantPaths("clip-uuid"))
                 .thenReturn(List.<String[]>of(new String[]{"clip-uuid", "clip.mp4", "VIDEO"}));
 
-        assertThat(fileService.deleteItemByExternalId("clip-uuid")).isTrue();
+        assertThat(fileService.permanentlyDeleteItemByExternalId("clip-uuid")).isTrue();
 
         assertThat(Files.exists(filePath)).isFalse();
         assertThat(Files.exists(thumbnailPath)).isFalse();
     }
 
     @Test
-    void deleteItemByExternalIdRemovesFolderTreeRecursively() throws Exception {
+    void permanentlyDeleteItemByExternalIdRemovesFolderTreeRecursively() throws Exception {
         Path folderPath = storageRoot.resolve("root/alice/folder");
         Files.createDirectories(folderPath);
         Files.writeString(folderPath.resolve("inner.txt"), "content");
@@ -409,8 +409,62 @@ class FileServiceTest {
                 new String[]{"inner-uuid", "inner.txt", "FILE"}
         ));
 
-        assertThat(fileService.deleteItemByExternalId("folder-uuid")).isTrue();
+        assertThat(fileService.permanentlyDeleteItemByExternalId("folder-uuid")).isTrue();
         assertThat(Files.exists(folderPath)).isFalse();
+    }
+
+    // --- softDeleteItem / restoreItem ---
+
+    @Test
+    void softDeleteItemDelegatesToRepository() {
+        when(fileRepository.softDeleteItem("doc-uuid")).thenReturn(true);
+
+        assertThat(fileService.softDeleteItem("doc-uuid")).isTrue();
+    }
+
+    @Test
+    void restoreItemDelegatesToRepository() {
+        when(fileRepository.restoreItem("doc-uuid")).thenReturn(true);
+
+        assertThat(fileService.restoreItem("doc-uuid")).isTrue();
+    }
+
+    // --- getTrashedItems ---
+
+    @Test
+    void getTrashedItemsReturnsEverythingForAdmin() {
+        Role admin = new Role(1L, "ADMIN", null);
+        User user = User.builder().username("root").userRoles(List.of(admin)).build();
+
+        when(fileRepository.findDeletedItems()).thenReturn(List.of(
+                new FileRepository.TrashRow("doc-uuid", 5, "doc.txt", FileType.TEXT, "hash", 10L, "2026-01-01 00:00:00")));
+        when(fileRepository.getFullPath("doc-uuid")).thenReturn("root/alice/doc.txt");
+
+        List<TrashedFileNode> trashed = fileService.getTrashedItems(user);
+
+        assertThat(trashed).containsExactly(
+                new TrashedFileNode("doc-uuid", "doc.txt", FileType.TEXT, 10L, "root/alice", "2026-01-01 00:00:00"));
+    }
+
+    @Test
+    void getTrashedItemsFiltersToTheUsersHomeFolderForRegularUser() {
+        Role userRole = new Role(2L, "USER_ROLE", null);
+        User user = User.builder().username("alice").userRoles(List.of(userRole)).build();
+
+        when(fileRepository.findIdByNameAndParent("root", null)).thenReturn(Optional.of(10));
+        FileNode home = new FileNode("home-uuid", null, "alice", FileType.FOLDER, null, 0L);
+        when(fileRepository.findByNameAndParent("alice", 10)).thenReturn(Optional.of(home));
+        when(fileRepository.getFullPath("home-uuid")).thenReturn("root/alice");
+
+        when(fileRepository.findDeletedItems()).thenReturn(List.of(
+                new FileRepository.TrashRow("mine-uuid", 5, "mine.txt", FileType.TEXT, "hash", 10L, "2026-01-01 00:00:00"),
+                new FileRepository.TrashRow("other-uuid", 6, "other.txt", FileType.TEXT, "hash", 20L, "2026-01-01 00:00:00")));
+        when(fileRepository.getFullPath("mine-uuid")).thenReturn("root/alice/mine.txt");
+        when(fileRepository.getFullPath("other-uuid")).thenReturn("root/bob/other.txt");
+
+        List<TrashedFileNode> trashed = fileService.getTrashedItems(user);
+
+        assertThat(trashed).extracting(TrashedFileNode::uuid).containsExactly("mine-uuid");
     }
 
     // --- getOrCreateWebDavRoot ---

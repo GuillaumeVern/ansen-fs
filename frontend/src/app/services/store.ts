@@ -22,6 +22,15 @@ export interface FileNode {
   size: number;
 }
 
+export interface TrashedFileNode {
+  uuid: string;
+  name: string;
+  type: FileType;
+  size: number;
+  originalPath: string;
+  deletedAt: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class StoreService {
   private http = inject(HttpClient);
@@ -158,11 +167,39 @@ export class StoreService {
 
       this.nodes.update(currentNodes => currentNodes.filter(node => node.uuid !== uuid));
 
-      console.log(`Resource ${uuid} successfully removed from server and state grid layout.`);
+      console.log(`Resource ${uuid} successfully moved to the bin.`);
       return true;
 
     } catch (err) {
       console.error(`Failed to delete resource item ${uuid}:`, err);
+      return false;
+    }
+  }
+
+  async getTrash(): Promise<TrashedFileNode[]> {
+    return firstValueFrom(this.http.get<TrashedFileNode[]>('/api/files/trash'));
+  }
+
+  async restoreItem(uuid: string): Promise<boolean> {
+    try {
+      await firstValueFrom(
+        this.http.post(`/api/files/trash/${uuid}/restore`, null, { responseType: 'text' })
+      );
+      return true;
+    } catch (err) {
+      console.error(`Failed to restore resource item ${uuid}:`, err);
+      return false;
+    }
+  }
+
+  async deleteForever(uuid: string): Promise<boolean> {
+    try {
+      await firstValueFrom(
+        this.http.delete(`/api/files/trash/${uuid}`, { responseType: 'text' })
+      );
+      return true;
+    } catch (err) {
+      console.error(`Failed to permanently delete resource item ${uuid}:`, err);
       return false;
     }
   }

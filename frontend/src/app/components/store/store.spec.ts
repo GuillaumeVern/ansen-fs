@@ -1,9 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpEventType } from '@angular/common/http';
 import { provideNzIcons } from 'ng-zorro-antd/icon';
+import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Store } from './store';
-import { StoreService } from '../../services/store';
+import { FileNode, StoreService } from '../../services/store';
 import { icons } from '../../icons-provider';
 
 if (!(globalThis as any).ResizeObserver) {
@@ -131,6 +133,128 @@ describe('Store', () => {
       component.onScrollIndexChange(0);
 
       expect(storeServiceStub.loadFiles).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('list view', () => {
+    const folderNode: FileNode = { uuid: 'f1', parentUuid: 'home', name: 'Docs', type: 'FOLDER', hash: null as any, size: 0 };
+    const fileNode: FileNode = { uuid: 'img1', parentUuid: 'home', name: 'photo.jpg', type: 'IMAGE', hash: null as any, size: 1536 };
+
+    it('toggleListView switches the view mode', () => {
+      expect((component as any).isListView()).toBe(false);
+      component.toggleListView(true);
+      expect((component as any).isListView()).toBe(true);
+      component.toggleListView(false);
+      expect((component as any).isListView()).toBe(false);
+    });
+
+    it('loadMore requests the next page', () => {
+      component.loadMore();
+      expect(storeServiceStub.loadFiles).toHaveBeenCalledWith(false);
+    });
+
+    it('openRow navigates into folders but does nothing for files', () => {
+      component.openRow(folderNode);
+      expect(storeServiceStub.changeParent).toHaveBeenCalledWith('Docs', 'f1');
+
+      storeServiceStub.changeParent.mockClear();
+      component.openRow(fileNode);
+      expect(storeServiceStub.changeParent).not.toHaveBeenCalled();
+    });
+
+    describe('onRowKeydown', () => {
+      it('opens a folder row on Enter/Space', () => {
+        const event = new KeyboardEvent('keydown', { key: 'Enter' });
+        const preventSpy = vi.spyOn(event, 'preventDefault');
+
+        component.onRowKeydown(event, folderNode);
+
+        expect(preventSpy).toHaveBeenCalled();
+        expect(storeServiceStub.changeParent).toHaveBeenCalledWith('Docs', 'f1');
+      });
+
+      it('does nothing for a file row', () => {
+        component.onRowKeydown(new KeyboardEvent('keydown', { key: 'Enter' }), fileNode);
+        expect(storeServiceStub.changeParent).not.toHaveBeenCalled();
+      });
+    });
+
+    it('typeIcon and displaySize match the grid view formatting', () => {
+      expect(component.typeIcon(folderNode)).toBe('folder');
+      expect(component.typeIcon(fileNode)).toBe('file-image');
+
+      expect(component.displaySize({ ...folderNode, size: 2048 })).toBe('2.0 KB (folder)');
+      expect(component.displaySize({ ...fileNode, size: 1536 })).toBe('1.5 KB');
+    });
+
+    describe('downloadNode', () => {
+      let createObjectURLSpy: ReturnType<typeof vi.fn>;
+      let revokeObjectURLSpy: ReturnType<typeof vi.fn>;
+
+      beforeEach(() => {
+        createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock') as any;
+        revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {}) as any;
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('tracks the downloading uuid and clears it on completion', () => {
+        const blob = new Blob(['data']);
+        storeServiceStub.downloadFile.mockReturnValue(
+          of(
+            { type: HttpEventType.DownloadProgress, loaded: 50, total: 100 } as any,
+            { type: HttpEventType.Response, body: blob } as any,
+          ),
+        );
+        const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+        expect(component.isDownloading('img1')).toBe(false);
+        component.downloadNode(fileNode);
+
+        expect(createObjectURLSpy).toHaveBeenCalledWith(blob);
+        expect(clickSpy).toHaveBeenCalled();
+        expect(component.isDownloading('img1')).toBe(false);
+
+        clickSpy.mockRestore();
+      });
+
+      it('clears the downloading uuid on error', () => {
+        storeServiceStub.downloadFile.mockReturnValue(throwError(() => new Error('network error')));
+
+        component.downloadNode(fileNode);
+
+        expect(component.isDownloading('img1')).toBe(false);
+      });
+    });
+
+    describe('onDeleteRowClick', () => {
+      it('does nothing when there is no active node', () => {
+        component.onDeleteRowClick(null);
+        expect(storeServiceStub.deleteItem).not.toHaveBeenCalled();
+      });
+
+      it('deletes the node when the user confirms', () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        component.onDeleteRowClick(fileNode);
+        expect(storeServiceStub.deleteItem).toHaveBeenCalledWith('img1');
+      });
+
+      it('does not delete when the user cancels', () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
+        component.onDeleteRowClick(fileNode);
+        expect(storeServiceStub.deleteItem).not.toHaveBeenCalled();
+      });
+    });
+
+    it('openContextMenu records the active node', () => {
+      const menu = { descendantMenuItemClick$: of(void 0) } as any;
+      vi.spyOn((component as any).nzContextMenuService, 'create').mockImplementation(() => {});
+
+      component.openContextMenu(new MouseEvent('contextmenu'), menu, fileNode);
+
+      expect((component as any).activeNode).toBe(fileNode);
     });
   });
 });

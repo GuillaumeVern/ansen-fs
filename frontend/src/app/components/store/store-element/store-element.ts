@@ -3,10 +3,12 @@ import {FileNode, FileType, StoreService} from '../../../services/store';
 import {NzCardComponent, NzCardMetaComponent} from 'ng-zorro-antd/card';
 import {NzButtonModule} from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
-import {HttpEvent, HttpEventType} from '@angular/common/http';
+import {NzContextMenuService, NzDropdownMenuComponent, NzDropdownModule} from 'ng-zorro-antd/dropdown';
+import {NzMenuModule} from 'ng-zorro-antd/menu';
 import {formatBytes} from '../../../shared/format';
-import {TransferRateEstimator} from '../../../shared/transfer-rate-estimator';
 import {TransferService} from '../../../services/transfer';
+import {TYPE_ICON} from '../../../shared/file-icons';
+import {downloadFile} from '../../../shared/file-download';
 
 type PreviewKind = 'image' | 'icon';
 
@@ -32,18 +34,8 @@ const PREVIEW_KIND: Record<FileType, PreviewKind> = {
   OTHER: 'icon',
 };
 
-/** Icon shown for the 'icon' preview kind, and as the fallback when a live preview fails to load. */
-const TYPE_ICON: Record<FileType, string> = {
-  FOLDER: 'folder',
-  IMAGE: 'file-image',
-  VIDEO: 'video-camera',
-  AUDIO: 'sound',
-  PDF: 'file-pdf',
-  DOCUMENT: 'file-text',
-  ARCHIVE: 'file-zip',
-  TEXT: 'file-text',
-  OTHER: 'file',
-};
+// TYPE_ICON (used as the 'icon' preview kind, and as the fallback when a live preview fails
+// to load) lives in shared/file-icons.ts so the bin's list view can reuse the same mapping.
 
 @Component({
   selector: 'app-store-element',
@@ -52,6 +44,8 @@ const TYPE_ICON: Record<FileType, string> = {
     NzCardMetaComponent,
     NzButtonModule,
     NzIconModule,
+    NzDropdownModule,
+    NzMenuModule,
   ],
   templateUrl: './store-element.html',
   styleUrl: './store-element.scss',
@@ -61,6 +55,7 @@ export class StoreElement implements OnChanges, OnDestroy {
   private storeService = inject(StoreService);
   private transferService = inject(TransferService);
   private cdr = inject(ChangeDetectorRef);
+  private nzContextMenuService = inject(NzContextMenuService);
   isDownloading = false;
   protected previewFailed = false;
   protected previewObjectUrl: string | null = null;
@@ -121,39 +116,9 @@ export class StoreElement implements OnChanges, OnDestroy {
   download() {
     this.isDownloading = true;
 
-    const estimator = new TransferRateEstimator();
-    this.transferService.startDownload(this.data.uuid, this.data.name);
-
-    this.storeService.downloadFile(this.data.uuid).subscribe({
-      next: (event: HttpEvent<Blob>) => {
-        if (event.type === HttpEventType.DownloadProgress) {
-          const etaSeconds = event.total ? estimator.estimateSecondsRemaining(event.loaded, event.total) : null;
-          this.transferService.updateDownload(this.data.uuid, event.loaded, event.total ?? 0, etaSeconds);
-        }
-
-        else if (event.type === HttpEventType.Response) {
-          const blob = event.body;
-          if (blob) {
-            const blobUrl = window.URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = blobUrl;
-            anchor.download = this.data.name;
-            document.body.appendChild(anchor);
-            anchor.click();
-            document.body.removeChild(anchor);
-            window.URL.revokeObjectURL(blobUrl);
-          }
-          this.isDownloading = false;
-          this.transferService.finishDownload(this.data.uuid);
-          this.cdr.detectChanges();
-        }
-      },
-      error: (err) => {
-        console.error('Download error:', err);
-        this.isDownloading = false;
-        this.transferService.finishDownload(this.data.uuid);
-        this.cdr.detectChanges();
-      }
+    downloadFile(this.storeService, this.transferService, this.data.uuid, this.data.name, () => {
+      this.isDownloading = false;
+      this.cdr.detectChanges();
     });
   }
 
@@ -174,12 +139,13 @@ export class StoreElement implements OnChanges, OnDestroy {
     this.previewFailed = true;
   }
 
-  onDeleteClick(event: MouseEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (confirm(`Are you sure you want to delete "${this.data.name}"?`)) {
+  onDeleteClick(): void {
+    if (confirm(`Are you sure you want to move "${this.data.name}" to the bin?`)) {
       this.delete.emit(this.data.uuid);
     }
+  }
+
+  openContextMenu(event: MouseEvent, menu: NzDropdownMenuComponent): void {
+    this.nzContextMenuService.create(event, menu);
   }
 }

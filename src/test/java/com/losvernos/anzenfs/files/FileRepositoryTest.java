@@ -280,4 +280,64 @@ class FileRepositoryTest {
                 "SELECT size_bytes FROM files WHERE external_id = ?", Long.class, "doc-uuid");
         assertThat(size).isEqualTo(777L);
     }
+
+    @Test
+    void hasDeletedAtColumnIsTrueOnTheCurrentSchema() {
+        assertThat(fileRepository.hasDeletedAtColumn()).isTrue();
+    }
+
+    @Test
+    void softDeleteItemStampsDeletedAtAndHidesItFromNormalListing() {
+        long rootId = insertRaw("root", null, "FOLDER", "root-uuid");
+        insertRaw("doc.txt", rootId, "TEXT", "doc-uuid");
+        List<Role> roles = List.of(new Role(1L, "USER_ROLE", null));
+
+        assertThat(fileRepository.softDeleteItem("doc-uuid")).isTrue();
+
+        String deletedAt = jdbcTemplate.queryForObject(
+                "SELECT deleted_at FROM files WHERE external_id = ?", String.class, "doc-uuid");
+        assertThat(deletedAt).isNotNull();
+        assertThat(fileRepository.getChildrenAfter((int) rootId, null, "root-uuid", 50, roles)).isEmpty();
+    }
+
+    @Test
+    void softDeleteItemIsANoOpWhenAlreadyDeletedOrMissing() {
+        insertRaw("doc.txt", null, "TEXT", "doc-uuid");
+        fileRepository.softDeleteItem("doc-uuid");
+
+        assertThat(fileRepository.softDeleteItem("doc-uuid")).isFalse();
+        assertThat(fileRepository.softDeleteItem("missing")).isFalse();
+    }
+
+    @Test
+    void restoreItemClearsDeletedAtAndBringsItBackToNormalListing() {
+        long rootId = insertRaw("root", null, "FOLDER", "root-uuid");
+        insertRaw("doc.txt", rootId, "TEXT", "doc-uuid");
+        List<Role> roles = List.of(new Role(1L, "USER_ROLE", null));
+        fileRepository.softDeleteItem("doc-uuid");
+
+        assertThat(fileRepository.restoreItem("doc-uuid")).isTrue();
+
+        assertThat(fileRepository.getChildrenAfter((int) rootId, null, "root-uuid", 50, roles))
+                .extracting(FileNode::name).containsExactly("doc.txt");
+    }
+
+    @Test
+    void restoreItemIsANoOpWhenNotDeletedOrMissing() {
+        insertRaw("doc.txt", null, "TEXT", "doc-uuid");
+
+        assertThat(fileRepository.restoreItem("doc-uuid")).isFalse();
+        assertThat(fileRepository.restoreItem("missing")).isFalse();
+    }
+
+    @Test
+    void findDeletedItemsReturnsOnlySoftDeletedRows() {
+        insertRaw("kept.txt", null, "TEXT", "kept-uuid");
+        insertRaw("trashed.txt", null, "TEXT", "trashed-uuid");
+        fileRepository.softDeleteItem("trashed-uuid");
+
+        assertThat(fileRepository.findDeletedItems())
+                .extracting(FileRepository.TrashRow::externalId)
+                .containsExactly("trashed-uuid");
+    }
 }

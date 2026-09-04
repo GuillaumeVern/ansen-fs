@@ -148,7 +148,7 @@ public class FileController {
   @PreAuthorize("@fsSecurity.hasAccess(#externalId, 'WRITE')")
   public ResponseEntity<String> deleteFileOrFolder(@PathVariable String externalId) {
     try {
-      boolean isDeleted = fileService.deleteItemByExternalId(externalId);
+      boolean isDeleted = fileService.softDeleteItem(externalId);
 
       if (!isDeleted) {
         return ResponseEntity
@@ -157,7 +157,49 @@ public class FileController {
       }
 
       return ResponseEntity
-              .ok("Item successfully deleted.");
+              .ok("Item moved to bin.");
+
+    } catch (Exception e) {
+      return ResponseEntity
+              .status(HttpStatus.INTERNAL_SERVER_ERROR)
+              .body("An error occurred while deleting the item: " + e.getMessage());
+    }
+  }
+
+  @GetMapping("/trash")
+  @PreAuthorize("isAuthenticated()")
+  public ResponseEntity<List<TrashedFileNode>> listTrash(@AuthenticationPrincipal User currentUser) {
+    return ResponseEntity.ok(fileService.getTrashedItems(currentUser));
+  }
+
+  @PostMapping("/trash/{externalId}/restore")
+  @PreAuthorize("@fsSecurity.hasAccess(#externalId, 'WRITE')")
+  public ResponseEntity<String> restoreFromTrash(@PathVariable String externalId) {
+    boolean restored = fileService.restoreItem(externalId);
+
+    if (!restored) {
+      return ResponseEntity
+              .status(HttpStatus.NOT_FOUND)
+              .body("Item with ID " + externalId + " not found in the bin.");
+    }
+
+    return ResponseEntity.ok("Item restored.");
+  }
+
+  @DeleteMapping("/trash/{externalId}")
+  @PreAuthorize("@fsSecurity.hasAccess(#externalId, 'WRITE')")
+  public ResponseEntity<String> deletePermanently(@PathVariable String externalId) {
+    try {
+      boolean isDeleted = fileService.permanentlyDeleteItemByExternalId(externalId);
+
+      if (!isDeleted) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body("Item with ID " + externalId + " not found.");
+      }
+
+      return ResponseEntity
+              .ok("Item permanently deleted.");
 
     } catch (Exception e) {
       return ResponseEntity

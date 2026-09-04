@@ -1,0 +1,48 @@
+<div class="trash-wrapper">
+  <h1 class="sr-only">Bin</h1>
+
+  <header class="trash-toolbar">
+    <p class="trash-hint">Deleted files and folders stay here until restored or permanently deleted. Right-click an item for actions.</p>
+  </header>
+
+  @if (isLoading()) {
+    <p class="loading-status" role="status">Loading…</p>
+  } @else if (items().length === 0) {
+    <p class="empty-status">The bin is empty.</p>
+  } @else {
+    <nz-table [nzData]="items()" [nzShowPagination]="false" nzSize="middle">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Original location</th>
+          <th>Size</th>
+          <th>Deleted</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of items(); track item.uuid) {
+          <tr (contextmenu)="openContextMenu($event, menu, item)">
+            <td>
+              <nz-icon [nzType]="typeIcon(item)" aria-hidden="true" />
+              {{ item.name }}
+            </td>
+            <td>{{ item.originalPath || '/' }}</td>
+            <td>{{ displaySize(item) }}</td>
+            <td>{{ formattedDeletedAt(item.deletedAt) }}</td>
+          </tr>
+        }
+      </tbody>
+    </nz-table>
+  }
+</div>
+
+<nz-dropdown-menu #menu="nzDropdownMenu">
+  <ul nz-menu>
+    <li nz-menu-item (click)="restore(activeItem)">
+      <nz-icon nzType="undo" aria-hidden="true" /> Restore
+    </li>
+    <li nz-menu-item nzDanger (click)="deleteForever(activeItem)">
+      <nz-icon nzType="delete" aria-hidden="true" /> Delete forever
+    </li>
+  </ul>
+</nz-dropdown-menu>

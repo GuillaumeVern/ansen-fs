@@ -219,7 +219,7 @@ public class WebDavController {
       return;
     }
 
-    fileService.deleteItemByExternalId(target.get().uuid());
+    fileService.permanentlyDeleteItemByExternalId(target.get().uuid());
     response.setStatus(HttpServletResponse.SC_NO_CONTENT);
   }
 

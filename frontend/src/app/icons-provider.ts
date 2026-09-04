@@ -19,7 +19,8 @@ import {
   SoundOutline,
   FilePdfOutline,
   FileTextOutline,
-  FileZipOutline
+  FileZipOutline,
+  UndoOutline
 } from '@ant-design/icons-angular/icons';
 
 export const icons = [
@@ -44,4 +45,5 @@ export const icons = [
   FilePdfOutline,
   FileTextOutline,
   FileZipOutline,
+  UndoOutline,
 ];

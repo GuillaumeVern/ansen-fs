@@ -39,6 +39,21 @@ public class FileRepository {
         jdbcTemplate.execute("ALTER TABLE files ADD COLUMN size_bytes INTEGER DEFAULT 0");
     }
 
+    /**
+     * schema.sql's CREATE TABLE IF NOT EXISTS only takes effect for brand-new databases, so
+     * this is how {@link com.losvernos.anzenfs.database.FileDeletedAtBackfillRunner} detects
+     * installs from before soft-delete (the bin) was introduced.
+     */
+    public boolean hasDeletedAtColumn() {
+        List<String> columns = jdbcTemplate.query(
+                "PRAGMA table_info(files)", (rs, rowNum) -> rs.getString("name"));
+        return columns.contains("deleted_at");
+    }
+
+    public void addDeletedAtColumn() {
+        jdbcTemplate.execute("ALTER TABLE files ADD COLUMN deleted_at DATETIME DEFAULT NULL");
+    }
+
     public record IdAndExternalId(int fileId, String externalId) {
     }
 
@@ -107,6 +122,7 @@ public class FileRepository {
                 SELECT f.* FROM files f
                 WHERE ((? IS NULL AND f.parent_id IS NULL) OR (f.parent_id = ?))
                   AND (? IS NULL OR f.name > ?)
+                  AND f.deleted_at IS NULL
                 ORDER BY f.name LIMIT ?;
                 """;
 
@@ -224,6 +240,43 @@ public class FileRepository {
 
         List<String> pathParts = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("name"), fileId, maxDepth);
         return String.join("/", pathParts);
+    }
+
+    /**
+     * Moves a single item into the bin by stamping it with a deletion timestamp. Descendants of
+     * a soft-deleted folder are left untouched: they simply become unreachable through normal
+     * browsing (their deleted ancestor no longer shows up), and reappear as-is when the ancestor
+     * is restored via {@link #restoreItem}.
+     */
+    public boolean softDeleteItem(String externalId) {
+        int updated = jdbcTemplate.update(
+                "UPDATE files SET deleted_at = CURRENT_TIMESTAMP WHERE external_id = ? AND deleted_at IS NULL",
+                externalId);
+        return updated > 0;
+    }
+
+    public boolean restoreItem(String externalId) {
+        int updated = jdbcTemplate.update(
+                "UPDATE files SET deleted_at = NULL WHERE external_id = ? AND deleted_at IS NOT NULL",
+                externalId);
+        return updated > 0;
+    }
+
+    public record TrashRow(String externalId, Integer parentId, String name, FileType type, String hash,
+                            long size, String deletedAt) {
+    }
+
+    public List<TrashRow> findDeletedItems() {
+        String sql = "SELECT * FROM files WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC";
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new TrashRow(
+                rs.getString("external_id"),
+                (Integer) rs.getObject("parent_id"),
+                rs.getString("name"),
+                FileType.valueOf(rs.getString("type")),
+                rs.getString("file_hash"),
+                rs.getLong("size_bytes"),
+                rs.getString("deleted_at")
+        ));
     }
 
     @Transactional

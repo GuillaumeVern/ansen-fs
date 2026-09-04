@@ -15,6 +15,11 @@ export const routes: Routes = [
     loadChildren: () => import('./pages/files/files.routes').then((m) => m.FILES_ROUTES),
   },
   {
+    path: 'bin',
+    canActivate: [authGuard],
+    loadChildren: () => import('./pages/trash/trash.routes').then((m) => m.TRASH_ROUTES),
+  },
+  {
     path: 'admin',
     canActivate: [authGuard, adminGuard],
     loadChildren: () => import('./pages/admin/admin.routes').then((m) => m.ADMIN_ROUTES),

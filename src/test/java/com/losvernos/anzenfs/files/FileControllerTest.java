@@ -152,7 +152,7 @@ class FileControllerTest {
 
     @Test
     void deleteFileReturnsOkWhenDeleted() throws Exception {
-        when(fileService.deleteItemByExternalId("doc-uuid")).thenReturn(true);
+        when(fileService.softDeleteItem("doc-uuid")).thenReturn(true);
 
         mockMvc.perform(delete("/api/files/doc-uuid"))
                 .andExpect(status().isOk());
@@ -160,7 +160,7 @@ class FileControllerTest {
 
     @Test
     void deleteFileReturns404WhenNotFound() throws Exception {
-        when(fileService.deleteItemByExternalId("missing")).thenReturn(false);
+        when(fileService.softDeleteItem("missing")).thenReturn(false);
 
         mockMvc.perform(delete("/api/files/missing"))
                 .andExpect(status().isNotFound());
@@ -168,10 +168,52 @@ class FileControllerTest {
 
     @Test
     void deleteFileReturns500OnException() throws Exception {
-        when(fileService.deleteItemByExternalId("boom")).thenThrow(new RuntimeException("boom"));
+        when(fileService.softDeleteItem("boom")).thenThrow(new RuntimeException("boom"));
 
         mockMvc.perform(delete("/api/files/boom"))
                 .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void listTrashReturnsServiceResult() throws Exception {
+        when(fileService.getTrashedItems(user)).thenReturn(
+                List.of(new TrashedFileNode("doc-uuid", "report.txt", FileType.TEXT, 10L, "alice", "2026-01-01 00:00:00")));
+
+        mockMvc.perform(get("/api/files/trash"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].uuid").value("doc-uuid"));
+    }
+
+    @Test
+    void restoreFromTrashReturnsOkWhenRestored() throws Exception {
+        when(fileService.restoreItem("doc-uuid")).thenReturn(true);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/files/trash/doc-uuid/restore"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void restoreFromTrashReturns404WhenNotFound() throws Exception {
+        when(fileService.restoreItem("missing")).thenReturn(false);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/files/trash/missing/restore"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deletePermanentlyReturnsOkWhenDeleted() throws Exception {
+        when(fileService.permanentlyDeleteItemByExternalId("doc-uuid")).thenReturn(true);
+
+        mockMvc.perform(delete("/api/files/trash/doc-uuid"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void deletePermanentlyReturns404WhenNotFound() throws Exception {
+        when(fileService.permanentlyDeleteItemByExternalId("missing")).thenReturn(false);
+
+        mockMvc.perform(delete("/api/files/trash/missing"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

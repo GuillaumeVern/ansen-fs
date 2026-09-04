@@ -26,6 +26,9 @@
     </div>
 
     <div class="toolbar-right">
+      <label nz-checkbox [nzChecked]="isListView()" (nzCheckedChange)="toggleListView($event)">
+        List view
+      </label>
       <button nz-button nzType="text" (click)="uploadController()?.triggerFileInput()">
         <nz-icon nzType="file-add" nzTheme="outline" aria-hidden="true" /> Upload Files
       </button>
@@ -39,18 +42,65 @@
     <p class="loading-status" role="status">Loading…</p>
   }
 
-  <cdk-virtual-scroll-viewport
-    [itemSize]="itemHeight"
-    class="viewport"
-    [style.--cols]="columns()"
-    [style.--item-h.px]="itemHeight"
-    (scrolledIndexChange)="onScrollIndexChange($event)">
+  @if (isListView()) {
+    <div class="list-view">
+      <nz-table #fileTable [nzData]="fileNodes()" [nzShowPagination]="false" nzSize="middle">
+        <thead>
+          <tr>
+            @for (column of listColumns; track column.key) {
+              <th [nzSortFn]="column.sortFn">{{ column.label }}</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (node of fileTable.data; track node.uuid) {
+            <tr
+              [attr.role]="node.type === 'FOLDER' ? 'button' : null"
+              [attr.tabindex]="node.type === 'FOLDER' ? 0 : null"
+              [attr.aria-label]="node.name"
+              (click)="openRow(node)"
+              (keydown)="onRowKeydown($event, node)"
+              (contextmenu)="openContextMenu($event, rowMenu, node)">
+              <td>
+                <nz-icon [nzType]="typeIcon(node)" aria-hidden="true" />
+                {{ node.name }}
+              </td>
+              <td>{{ node.type }}</td>
+              <td>{{ displaySize(node) }}</td>
+            </tr>
+          }
+        </tbody>
+      </nz-table>
 
-    <div *cdkVirtualFor="let row of rows(); trackBy: trackByRow" class="grid-row">
-      @for (node of row; track node.uuid) {
-        <app-store-element [data]="node" class="grid-item" (delete)="deleteItem($event)"/>
+      @if (!isExhausted() && !isLoading()) {
+        <button nz-button nzType="text" class="load-more" (click)="loadMore()">Load more</button>
       }
     </div>
-  </cdk-virtual-scroll-viewport>
+  } @else {
+    <cdk-virtual-scroll-viewport
+      [itemSize]="itemHeight"
+      class="viewport"
+      [style.--cols]="columns()"
+      [style.--item-h.px]="itemHeight"
+      (scrolledIndexChange)="onScrollIndexChange($event)">
+
+      <div *cdkVirtualFor="let row of rows(); trackBy: trackByRow" class="grid-row">
+        @for (node of row; track node.uuid) {
+          <app-store-element [data]="node" class="grid-item" (delete)="deleteItem($event)"/>
+        }
+      </div>
+    </cdk-virtual-scroll-viewport>
+  }
 
 </div>
+
+<nz-dropdown-menu #rowMenu="nzDropdownMenu">
+  <ul nz-menu>
+    <li nz-menu-item [nzDisabled]="!!activeNode && isDownloading(activeNode.uuid)" (click)="downloadNode(activeNode!)">
+      <nz-icon nzType="download" aria-hidden="true" /> Download
+    </li>
+    <li nz-menu-item nzDanger (click)="onDeleteRowClick(activeNode)">
+      <nz-icon nzType="delete" aria-hidden="true" /> Delete
+    </li>
+  </ul>
+</nz-dropdown-menu>

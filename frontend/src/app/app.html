@@ -10,16 +10,18 @@
     [nzTrigger]="null"
   >
     <div class="sidebar-logo">
-      <a href="https://ng.ant.design/" target="_blank" rel="noopener" aria-label="Ant Design of Angular — opens in a new tab">
-        <img src="https://ng.ant.design/assets/img/logo.svg" alt="" />
-        <p class="app-name">Ant Design of Angular</p>
-      </a>
+      <img src="https://ng.ant.design/assets/img/logo.svg" alt="" />
+      <p class="app-name">Anzen-fs</p>
     </div>
     <nav aria-label="Main navigation">
       <ul nz-menu nzTheme="dark" nzMode="inline" [nzInlineCollapsed]="isCollapsed">
         <li nz-menu-item nzMatchRouter>
           <nz-icon nzType="folder" aria-hidden="true"/>
           <a routerLink="/files"> Files</a>
+        </li>
+        <li nz-menu-item nzMatchRouter>
+          <nz-icon nzType="delete" aria-hidden="true"/>
+          <a routerLink="/bin"> Bin</a>
         </li>
         @if (authService.isAdmin()) {
           <li nz-menu-item nzMatchRouter>

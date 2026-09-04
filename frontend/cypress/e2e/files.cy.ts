@@ -51,15 +51,17 @@ describe('File browsing', () => {
       delay: 200,
     }).as('download');
 
-    cy.contains('.grid-item', 'notes.txt').find('button[aria-label="Download notes.txt"]').click();
+    cy.contains('.grid-item', 'notes.txt').rightclick();
+    cy.get('.ant-dropdown-menu-item').contains('Download').click();
     cy.wait('@download');
   });
 
   it('deletes a file after confirmation', () => {
     cy.intercept('DELETE', '/api/files/file-1', '').as('deleteFile');
 
-    cy.contains('.grid-item', 'notes.txt').find('button[aria-label="Delete notes.txt"]').click();
+    cy.contains('.grid-item', 'notes.txt').rightclick();
     // The app uses a native confirm() dialog; Cypress auto-accepts it.
+    cy.get('.ant-dropdown-menu-item').contains('Delete').click();
     cy.wait('@deleteFile');
     cy.contains('.grid-item', 'notes.txt').should('not.exist');
   });

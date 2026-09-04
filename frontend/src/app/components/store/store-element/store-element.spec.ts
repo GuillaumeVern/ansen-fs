@@ -29,9 +29,8 @@ describe('StoreElement', () => {
     };
 
     let objectUrlCounter = 0;
-    createObjectURLSpy = vi.fn().mockImplementation(() => `blob:mock-${++objectUrlCounter}`);
-    revokeObjectURLSpy = vi.fn();
-    vi.stubGlobal('URL', { createObjectURL: createObjectURLSpy, revokeObjectURL: revokeObjectURLSpy });
+    createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:mock-${++objectUrlCounter}`) as any;
+    revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {}) as any;
 
     await TestBed.configureTestingModule({
       imports: [StoreElement],
@@ -44,7 +43,7 @@ describe('StoreElement', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('should create and render the item name', async () => {
@@ -206,13 +205,12 @@ describe('StoreElement', () => {
 
     beforeEach(() => {
       fixture.componentRef.setInput('data', imageNode);
-      createObjectURLSpy = vi.fn().mockReturnValue('blob:mock');
-      revokeObjectURLSpy = vi.fn();
-      vi.stubGlobal('URL', { createObjectURL: createObjectURLSpy, revokeObjectURL: revokeObjectURLSpy });
+      createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock') as any;
+      revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {}) as any;
     });
 
     afterEach(() => {
-      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
     });
 
     it('tracks progress and triggers a browser download on completion', () => {
@@ -250,14 +248,8 @@ describe('StoreElement', () => {
       const emitSpy = vi.spyOn(component.delete, 'emit');
       vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-      const event = new MouseEvent('click');
-      const preventSpy = vi.spyOn(event, 'preventDefault');
-      const stopSpy = vi.spyOn(event, 'stopPropagation');
+      component.onDeleteClick();
 
-      component.onDeleteClick(event);
-
-      expect(preventSpy).toHaveBeenCalled();
-      expect(stopSpy).toHaveBeenCalled();
       expect(emitSpy).toHaveBeenCalledWith('img1');
     });
 
@@ -265,7 +257,7 @@ describe('StoreElement', () => {
       const emitSpy = vi.spyOn(component.delete, 'emit');
       vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-      component.onDeleteClick(new MouseEvent('click'));
+      component.onDeleteClick();
 
       expect(emitSpy).not.toHaveBeenCalled();
     });

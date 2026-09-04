@@ -1,0 +1,28 @@
+.trash-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.trash-toolbar {
+  padding-bottom: 14px;
+}
+
+.trash-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ant-text-color-secondary, #00000073);
+}
+
+.loading-status,
+.empty-status {
+  margin: 0;
+  padding: 24px 0;
+  font-size: 13px;
+  color: var(--ant-text-color-secondary, #00000073);
+}
+
+nz-icon {
+  margin-right: 8px;
+}

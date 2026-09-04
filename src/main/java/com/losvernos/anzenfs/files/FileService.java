@@ -341,7 +341,48 @@ public class FileService {
         .orElseThrow(() -> new IllegalStateException("WebDAV folder missing in database: " + folder.uuid()));
   }
 
-  public boolean deleteItemByExternalId(String externalId) {
+  /** Moves an item into the bin. It stays in the database (and on disk) until restored or permanently deleted. */
+  public boolean softDeleteItem(String externalId) {
+    return fileRepository.softDeleteItem(externalId);
+  }
+
+  /** Moves an item out of the bin, back to where it was before it was deleted. */
+  public boolean restoreItem(String externalId) {
+    return fileRepository.restoreItem(externalId);
+  }
+
+  /**
+   * Lists everything currently in the bin. Admins see every deleted item; everyone else only
+   * sees items that were under their own home folder, mirroring the ownership boundary used
+   * for normal browsing.
+   */
+  public List<TrashedFileNode> getTrashedItems(User currentUser) {
+    boolean isAdmin = currentUser.getUserRoles() != null
+            && currentUser.getUserRoles().stream().anyMatch(r -> r.getName().equalsIgnoreCase("ADMIN"));
+
+    String homePathPrefix = null;
+    if (!isAdmin) {
+      String homePath = fileRepository.getFullPath(getHomeFolder(currentUser).uuid());
+      homePathPrefix = (homePath == null ? "" : homePath) + "/";
+    }
+
+    List<TrashedFileNode> result = new ArrayList<>();
+    for (FileRepository.TrashRow row : fileRepository.findDeletedItems()) {
+      String fullPath = fileRepository.getFullPath(row.externalId());
+      if (fullPath == null) continue;
+      if (homePathPrefix != null && !fullPath.startsWith(homePathPrefix)) continue;
+
+      String originalPath = fullPath.contains("/") ? fullPath.substring(0, fullPath.lastIndexOf('/')) : "";
+      long size = row.type() == FileType.FOLDER ? fileRepository.getFolderSize(row.externalId()) : row.size();
+
+      result.add(new TrashedFileNode(row.externalId(), row.name(), row.type(), size, originalPath, row.deletedAt()));
+    }
+
+    return result;
+  }
+
+  /** Permanently removes an item (and, for a folder, everything under it) from the database and disk. */
+  public boolean permanentlyDeleteItemByExternalId(String externalId) {
     String primaryRelativePath = fileRepository.getFullPath(externalId);
     if (primaryRelativePath == null) {
       return false;

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS files
     type        TEXT        NOT NULL,
     file_hash   TEXT,
     size_bytes  INTEGER DEFAULT 0,
+    deleted_at  DATETIME DEFAULT NULL,
     FOREIGN KEY (parent_id) REFERENCES files (file_id) ON DELETE CASCADE
 );
 
